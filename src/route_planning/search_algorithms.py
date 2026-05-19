@@ -12,8 +12,6 @@ from landmark_heuristic import LandmarkHeuristic
 
 
 DEFAULT_HEURISTIC_SPEED_KPH = 40.0
-DEFAULT_TRACE_LIMIT = 400
-
 
 @dataclass
 class SearchResult:
@@ -106,11 +104,6 @@ def _path_metrics(graph, path: list[str]) -> tuple[float, float]:
     return total_length_m / 1000, total_time_s / 60
 
 
-def _append_trace(trace: list[str], node: str, trace_limit: int) -> None:
-    if len(trace) < trace_limit:
-        trace.append(node)
-
-
 def _not_found(algorithm: str, start_time: float, expanded_nodes: int, expanded_trace: list[str]) -> SearchResult:
     return SearchResult(
         algorithm=algorithm,
@@ -145,7 +138,7 @@ def _success(
     )
 
 
-def bfs_search(graph, start: str, goal: str, trace_limit: int = DEFAULT_TRACE_LIMIT) -> SearchResult:
+def bfs_search(graph, start: str, goal: str) -> SearchResult:
     started = time.perf_counter()
     queue = deque([(start, [start])])
     visited = {start}
@@ -155,7 +148,7 @@ def bfs_search(graph, start: str, goal: str, trace_limit: int = DEFAULT_TRACE_LI
     while queue:
         node, path = queue.popleft()
         expanded += 1
-        _append_trace(expanded_trace, node, trace_limit)
+        expanded_trace.append(node)
         if node == goal:
             return _success("bfs", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
@@ -165,7 +158,7 @@ def bfs_search(graph, start: str, goal: str, trace_limit: int = DEFAULT_TRACE_LI
     return _not_found("bfs", started, expanded, expanded_trace)
 
 
-def ucs_search(graph, start: str, goal: str, trace_limit: int = DEFAULT_TRACE_LIMIT) -> SearchResult:
+def ucs_search(graph, start: str, goal: str) -> SearchResult:
     started = time.perf_counter()
     heap = [(0.0, start, [start])]
     best_cost = {start: 0.0}
@@ -177,7 +170,7 @@ def ucs_search(graph, start: str, goal: str, trace_limit: int = DEFAULT_TRACE_LI
         if cost > best_cost.get(node, float("inf")):
             continue
         expanded += 1
-        _append_trace(expanded_trace, node, trace_limit)
+        expanded_trace.append(node)
         if node == goal:
             return _success("ucs", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
@@ -194,7 +187,6 @@ def astar_search(
     start: str,
     goal: str,
     landmark_heuristic: LandmarkHeuristic | None = None,
-    trace_limit: int = DEFAULT_TRACE_LIMIT,
 ) -> SearchResult:
     started = time.perf_counter()
     heap = [(_heuristic_minutes(graph, start, goal, landmark_heuristic), 0.0, start, [start])]
@@ -207,7 +199,7 @@ def astar_search(
         if cost > best_cost.get(node, float("inf")):
             continue
         expanded += 1
-        _append_trace(expanded_trace, node, trace_limit)
+        expanded_trace.append(node)
         if node == goal:
             return _success("astar", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
@@ -226,13 +218,12 @@ def run_search(
     goal: str,
     algorithm: str,
     landmark_heuristic: LandmarkHeuristic | None = None,
-    trace_limit: int = DEFAULT_TRACE_LIMIT,
 ) -> SearchResult:
     algorithm = algorithm.lower()
     if algorithm == "bfs":
-        return bfs_search(graph, start, goal, trace_limit)
+        return bfs_search(graph, start, goal)
     if algorithm == "ucs":
-        return ucs_search(graph, start, goal, trace_limit)
+        return ucs_search(graph, start, goal)
     if algorithm in {"astar", "a*"}:
-        return astar_search(graph, start, goal, landmark_heuristic, trace_limit)
+        return astar_search(graph, start, goal, landmark_heuristic)
     raise ValueError(f"Unsupported algorithm: {algorithm}")
