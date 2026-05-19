@@ -250,7 +250,7 @@ export function App() {
               <div className="metric-grid">
                 <Metric label="Algorithm" value={form.algorithm.toUpperCase()} />
                 <Metric label="Expanded" value={`${selectedRecommendation.expanded_nodes}`} />
-                <Metric label="Runtime" value={`${selectedRecommendation.runtime_seconds.toFixed(3)} s`} />
+                <Metric label="Runtime" value={formatRuntime(selectedRecommendation.runtime_seconds)} />
               </div>
               <div className="playback-controls">
                 <button
@@ -357,6 +357,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function formatMetric(value: number | null) {
   return value === null ? "-" : value.toFixed(2);
+}
+
+function formatRuntime(seconds: number) {
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  return `${seconds.toFixed(2)} s`;
 }
 
 function formatPoiSummary(item: RecommendationItem) {
