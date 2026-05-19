@@ -1,0 +1,2 @@
+feature_set,target,features,rows,train_rows,test_rows,stations,mae,r2,elapsed_seconds,split,cutoff_time,train_start,train_end,test_start,test_end
+lag_only,occupancy_rate,8,5211600,4168900,1042700,100,0.010148784306261326,0.9856353108541943,56.44100360000084,fixed_time_holdout,2023-01-23T19:05:00,2022-09-01T01:00:00,2023-01-23T19:00:00,2023-01-23T19:05:00,2023-02-28T23:55:00
