@@ -189,8 +189,20 @@ export function RouteMap({
 
     const tracePoints = selectedRecommendation.expanded_trace_coordinates;
     const visibleTraceCount = Math.max(0, Math.ceil(tracePoints.length * searchPlaybackProgress));
-    const visibleTrace = tracePoints.slice(0, visibleTraceCount).map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap)));
+    const visibleTracePoints = tracePoints.slice(0, visibleTraceCount).map(([lat, lng]) => toMapPoint({ lat, lng }, basemap));
+    const visibleTrace = visibleTracePoints.map(toLeaflet);
     if (visibleTrace.length && searchTraceLayerRef.current) {
+      const hull = convexHull(visibleTracePoints);
+      if (hull.length >= 3) {
+        L.polygon(hull.map(toLeaflet), {
+          color: "#7c3aed",
+          weight: 2,
+          opacity: 0.52,
+          fillColor: "#8b5cf6",
+          fillOpacity: 0.16,
+          interactive: false,
+        }).addTo(searchTraceLayerRef.current);
+      }
       visibleTrace.forEach((point, index) => {
         const opacity = 0.18 + (index / Math.max(visibleTrace.length - 1, 1)) * 0.42;
         L.circleMarker(point, {
@@ -271,6 +283,37 @@ function removePolyline(ref: React.MutableRefObject<L.Polyline | null>) {
     ref.current.remove();
     ref.current = null;
   }
+}
+
+function convexHull(points: Point[]): Point[] {
+  const unique = Array.from(new Map(points.map((point) => [`${point.lng},${point.lat}`, point])).values()).sort(
+    (a, b) => a.lng - b.lng || a.lat - b.lat,
+  );
+  if (unique.length <= 2) return unique;
+
+  const lower: Point[] = [];
+  unique.forEach((point) => {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+      lower.pop();
+    }
+    lower.push(point);
+  });
+
+  const upper: Point[] = [];
+  [...unique].reverse().forEach((point) => {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+      upper.pop();
+    }
+    upper.push(point);
+  });
+
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
+function cross(origin: Point, a: Point, b: Point) {
+  return (a.lng - origin.lng) * (b.lat - origin.lat) - (a.lat - origin.lat) * (b.lng - origin.lng);
 }
 
 function stationIcon(selected: boolean) {
