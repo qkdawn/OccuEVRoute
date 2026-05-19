@@ -8,8 +8,14 @@ import pickle
 import time
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import shap
 from sklearn.metrics import mean_absolute_error, r2_score
 from xgboost import XGBRegressor
 
@@ -59,6 +65,17 @@ LAG_FEATURES = [
     "occupancy_rolling_std_12",
     "occupancy_trend_12",
 ]
+
+FEATURE_LABELS = {
+    "occupancy_lag_1": "Previous 5 min occupancy",
+    "occupancy_lag_3": "Previous 15 min occupancy",
+    "occupancy_lag_6": "Previous 30 min occupancy",
+    "occupancy_lag_12": "Previous 60 min occupancy",
+    "occupancy_rolling_mean_6": "30 min rolling mean",
+    "occupancy_rolling_mean_12": "60 min rolling mean",
+    "occupancy_rolling_std_12": "60 min volatility",
+    "occupancy_trend_12": "60 min trend",
+}
 
 FEATURES = [*BASE_FEATURES, *LAG_FEATURES]
 
@@ -216,7 +233,16 @@ def evaluate_feature_set(
     return model, metrics, importance
 
 
-def train_and_evaluate(args: argparse.Namespace) -> tuple[XGBRegressor, dict[str, object], pd.DataFrame, dict[str, object], pd.DataFrame]:
+def train_and_evaluate(
+    args: argparse.Namespace,
+) -> tuple[
+    XGBRegressor,
+    dict[str, object],
+    pd.DataFrame,
+    dict[str, object],
+    pd.DataFrame,
+    pd.DataFrame,
+]:
     started = time.perf_counter()
     df = build_lagged_frame(args)
     train_df, test_df = time_split(df, pd.Timestamp(args.cutoff_time))
@@ -262,7 +288,89 @@ def train_and_evaluate(args: argparse.Namespace) -> tuple[XGBRegressor, dict[str
         "weather_file": str(args.weather_file),
         "total_elapsed_seconds": time.perf_counter() - started,
     }
-    return model, metrics, pd.concat(importance_parts, ignore_index=True), metadata, metrics_table
+    return model, metrics, pd.concat(importance_parts, ignore_index=True), metadata, metrics_table, test_df
+
+
+def compute_shap_summary(
+    model: XGBRegressor,
+    test_df: pd.DataFrame,
+    features: list[str],
+    sample_size: int,
+    random_seed: int,
+) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
+    x_test = test_df[features]
+    sample = x_test.sample(min(sample_size, len(x_test)), random_state=random_seed)
+    explainer = shap.TreeExplainer(model)
+    shap_values = np.asarray(explainer.shap_values(sample))
+    importance = (
+        pd.DataFrame(
+            {
+                "feature": features,
+                "display_feature": [FEATURE_LABELS.get(feature, feature) for feature in features],
+                "mean_abs_shap": np.abs(shap_values).mean(axis=0),
+            }
+        )
+        .sort_values("mean_abs_shap", ascending=False)
+        .reset_index(drop=True)
+    )
+    return sample, shap_values, importance
+
+
+def save_shap_plots(
+    sample: pd.DataFrame,
+    shap_values: np.ndarray,
+    shap_importance: pd.DataFrame,
+    metrics: dict[str, object],
+    output_dir: Path,
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shap_importance.to_csv(output_dir / "occupancy_lagged_shap_importance.csv", index=False)
+
+    plt.rcParams.update(
+        {
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "axes.edgecolor": "#d8dee8",
+            "axes.labelcolor": "#172033",
+            "xtick.color": "#475569",
+            "ytick.color": "#475569",
+            "font.size": 11,
+        }
+    )
+
+    order = shap_importance.sort_values("mean_abs_shap", ascending=True)
+    fig, ax = plt.subplots(figsize=(9.5, 5.6))
+    colors = plt.cm.viridis(np.linspace(0.3, 0.82, len(order)))
+    ax.barh(order["display_feature"], order["mean_abs_shap"], color=colors, edgecolor="none")
+    ax.set_xlabel("Mean absolute SHAP value")
+    ax.set_title("Lagged Occupancy Model: Feature Impact", fontsize=16, fontweight="bold", color="#172033", pad=14)
+    ax.text(
+        0,
+        1.02,
+        f"Fixed time holdout | R2={float(metrics['r2']):.3f} | MAE={float(metrics['mae']):.3f}",
+        transform=ax.transAxes,
+        color="#64748b",
+        fontsize=11,
+    )
+    ax.grid(axis="x", color="#e5eaf0", linewidth=0.9)
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(output_dir / "occupancy_lagged_shap_bar.png", dpi=240)
+    plt.close(fig)
+
+    display_sample = sample.rename(columns=FEATURE_LABELS)
+    fig = plt.figure(figsize=(10, 5.8))
+    shap.summary_plot(
+        shap_values,
+        display_sample,
+        show=False,
+        max_display=len(display_sample.columns),
+        color_bar_label="Feature value",
+    )
+    plt.title("Lagged Occupancy Model: SHAP Summary", fontsize=16, fontweight="bold", color="#172033", pad=12)
+    plt.tight_layout()
+    fig.savefig(output_dir / "occupancy_lagged_shap_summary.png", dpi=240, bbox_inches="tight")
+    plt.close(fig)
 
 
 def save_outputs(
@@ -271,8 +379,11 @@ def save_outputs(
     importance: pd.DataFrame,
     metadata: dict[str, object],
     metrics_table: pd.DataFrame,
+    test_df: pd.DataFrame,
     output_dir: Path,
     model_dir: Path,
+    shap_sample_size: int,
+    random_seed: int,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -285,6 +396,14 @@ def save_outputs(
     pd.DataFrame([metrics]).to_csv(output_dir / "occupancy_lagged_model_metrics.csv", index=False)
     metrics_table.to_csv(output_dir / "occupancy_lagged_feature_set_metrics.csv", index=False)
     importance.to_csv(output_dir / "occupancy_lagged_feature_importance.csv", index=False)
+    shap_sample, shap_values, shap_importance = compute_shap_summary(
+        model,
+        test_df,
+        metadata["features"],
+        shap_sample_size,
+        random_seed,
+    )
+    save_shap_plots(shap_sample, shap_values, shap_importance, metrics, output_dir)
 
 
 def parse_args() -> argparse.Namespace:
@@ -296,14 +415,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cutoff-time", type=str, default=DEFAULT_CUTOFF_TIME.isoformat())
     parser.add_argument("--tail-rows-per-station", type=int, default=0)
     parser.add_argument("--max-stations", type=int, default=None)
+    parser.add_argument("--shap-sample-size", type=int, default=5000)
     parser.add_argument("--random-seed", type=int, default=42)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    model, metrics, importance, metadata, metrics_table = train_and_evaluate(args)
-    save_outputs(model, metrics, importance, metadata, metrics_table, args.output_dir, args.model_dir)
+    model, metrics, importance, metadata, metrics_table, test_df = train_and_evaluate(args)
+    save_outputs(
+        model,
+        metrics,
+        importance,
+        metadata,
+        metrics_table,
+        test_df,
+        args.output_dir,
+        args.model_dir,
+        args.shap_sample_size,
+        args.random_seed,
+    )
     print(metrics_table.to_string(index=False))
     print("\nSelected feature set:", metadata["selected_feature_set"])
     print(importance.head(20).to_string(index=False))

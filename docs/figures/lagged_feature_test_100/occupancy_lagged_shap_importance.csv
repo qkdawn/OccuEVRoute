@@ -1,0 +1,9 @@
+feature,display_feature,mean_abs_shap
+occupancy_lag_1,Previous 5 min occupancy,0.12771979
+occupancy_rolling_mean_6,30 min rolling mean,0.079898246
+occupancy_rolling_mean_12,60 min rolling mean,0.017475862
+occupancy_lag_3,Previous 15 min occupancy,0.004305458
+occupancy_lag_6,Previous 30 min occupancy,0.0025117598
+occupancy_lag_12,Previous 60 min occupancy,0.0016736196
+occupancy_trend_12,60 min trend,0.0014600494
+occupancy_rolling_std_12,60 min volatility,0.0013001377
