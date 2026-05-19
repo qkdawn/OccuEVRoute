@@ -12,6 +12,7 @@ from landmark_heuristic import LandmarkHeuristic
 
 
 DEFAULT_HEURISTIC_SPEED_KPH = 40.0
+DEFAULT_TRACE_LIMIT = 400
 
 
 @dataclass
@@ -23,6 +24,7 @@ class SearchResult:
     drive_time_min: float | None
     expanded_nodes: int
     runtime_seconds: float
+    expanded_trace: list[str]
 
 
 def _node_xy(graph, node: str) -> tuple[float, float]:
@@ -104,7 +106,12 @@ def _path_metrics(graph, path: list[str]) -> tuple[float, float]:
     return total_length_m / 1000, total_time_s / 60
 
 
-def _not_found(algorithm: str, start_time: float, expanded_nodes: int) -> SearchResult:
+def _append_trace(trace: list[str], node: str, trace_limit: int) -> None:
+    if len(trace) < trace_limit:
+        trace.append(node)
+
+
+def _not_found(algorithm: str, start_time: float, expanded_nodes: int, expanded_trace: list[str]) -> SearchResult:
     return SearchResult(
         algorithm=algorithm,
         path=[],
@@ -113,10 +120,18 @@ def _not_found(algorithm: str, start_time: float, expanded_nodes: int) -> Search
         drive_time_min=None,
         expanded_nodes=expanded_nodes,
         runtime_seconds=time.perf_counter() - start_time,
+        expanded_trace=expanded_trace,
     )
 
 
-def _success(algorithm: str, graph, path: list[str], start_time: float, expanded_nodes: int) -> SearchResult:
+def _success(
+    algorithm: str,
+    graph,
+    path: list[str],
+    start_time: float,
+    expanded_nodes: int,
+    expanded_trace: list[str],
+) -> SearchResult:
     distance_km, drive_time_min = _path_metrics(graph, path)
     return SearchResult(
         algorithm=algorithm,
@@ -126,62 +141,75 @@ def _success(algorithm: str, graph, path: list[str], start_time: float, expanded
         drive_time_min=drive_time_min,
         expanded_nodes=expanded_nodes,
         runtime_seconds=time.perf_counter() - start_time,
+        expanded_trace=expanded_trace,
     )
 
 
-def bfs_search(graph, start: str, goal: str) -> SearchResult:
+def bfs_search(graph, start: str, goal: str, trace_limit: int = DEFAULT_TRACE_LIMIT) -> SearchResult:
     started = time.perf_counter()
     queue = deque([(start, [start])])
     visited = {start}
     expanded = 0
+    expanded_trace = []
 
     while queue:
         node, path = queue.popleft()
         expanded += 1
+        _append_trace(expanded_trace, node, trace_limit)
         if node == goal:
-            return _success("bfs", graph, path, started, expanded)
+            return _success("bfs", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
             if neighbor not in visited:
                 visited.add(neighbor)
                 queue.append((neighbor, path + [neighbor]))
-    return _not_found("bfs", started, expanded)
+    return _not_found("bfs", started, expanded, expanded_trace)
 
 
-def ucs_search(graph, start: str, goal: str) -> SearchResult:
+def ucs_search(graph, start: str, goal: str, trace_limit: int = DEFAULT_TRACE_LIMIT) -> SearchResult:
     started = time.perf_counter()
     heap = [(0.0, start, [start])]
     best_cost = {start: 0.0}
     expanded = 0
+    expanded_trace = []
 
     while heap:
         cost, node, path = heapq.heappop(heap)
         if cost > best_cost.get(node, float("inf")):
             continue
         expanded += 1
+        _append_trace(expanded_trace, node, trace_limit)
         if node == goal:
-            return _success("ucs", graph, path, started, expanded)
+            return _success("ucs", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
             _, travel_time_s = _edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost
                 heapq.heappush(heap, (new_cost, neighbor, path + [neighbor]))
-    return _not_found("ucs", started, expanded)
+    return _not_found("ucs", started, expanded, expanded_trace)
 
 
-def astar_search(graph, start: str, goal: str, landmark_heuristic: LandmarkHeuristic | None = None) -> SearchResult:
+def astar_search(
+    graph,
+    start: str,
+    goal: str,
+    landmark_heuristic: LandmarkHeuristic | None = None,
+    trace_limit: int = DEFAULT_TRACE_LIMIT,
+) -> SearchResult:
     started = time.perf_counter()
     heap = [(_heuristic_minutes(graph, start, goal, landmark_heuristic), 0.0, start, [start])]
     best_cost = {start: 0.0}
     expanded = 0
+    expanded_trace = []
 
     while heap:
         _, cost, node, path = heapq.heappop(heap)
         if cost > best_cost.get(node, float("inf")):
             continue
         expanded += 1
+        _append_trace(expanded_trace, node, trace_limit)
         if node == goal:
-            return _success("astar", graph, path, started, expanded)
+            return _success("astar", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
             _, travel_time_s = _edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
@@ -189,7 +217,7 @@ def astar_search(graph, start: str, goal: str, landmark_heuristic: LandmarkHeuri
                 best_cost[neighbor] = new_cost
                 priority = new_cost + _heuristic_minutes(graph, neighbor, goal, landmark_heuristic)
                 heapq.heappush(heap, (priority, new_cost, neighbor, path + [neighbor]))
-    return _not_found("astar", started, expanded)
+    return _not_found("astar", started, expanded, expanded_trace)
 
 
 def run_search(
@@ -198,12 +226,13 @@ def run_search(
     goal: str,
     algorithm: str,
     landmark_heuristic: LandmarkHeuristic | None = None,
+    trace_limit: int = DEFAULT_TRACE_LIMIT,
 ) -> SearchResult:
     algorithm = algorithm.lower()
     if algorithm == "bfs":
-        return bfs_search(graph, start, goal)
+        return bfs_search(graph, start, goal, trace_limit)
     if algorithm == "ucs":
-        return ucs_search(graph, start, goal)
+        return ucs_search(graph, start, goal, trace_limit)
     if algorithm in {"astar", "a*"}:
-        return astar_search(graph, start, goal, landmark_heuristic)
+        return astar_search(graph, start, goal, landmark_heuristic, trace_limit)
     raise ValueError(f"Unsupported algorithm: {algorithm}")

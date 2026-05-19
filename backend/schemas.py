@@ -38,6 +38,7 @@ class RecommendationItem(BaseModel):
     start_node_longitude: float | None
     start_snap_distance_m: float | None
     route_coordinates: list[tuple[float, float]]
+    expanded_trace_coordinates: list[tuple[float, float]]
     distance_km: float | None
     drive_time_min: float | None
     road_snap_distance_m: float | None

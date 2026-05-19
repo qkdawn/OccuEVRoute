@@ -36,6 +36,7 @@ interface RouteMapProps {
   selectedPoint: Point | null;
   recommendations: RecommendationItem[];
   selectedStationId: number | null;
+  searchPlaybackProgress: number;
   onPointChange: (point: Point) => void;
   onInvalidPoint: () => void;
   onStationSelect: (stationId: number) => void;
@@ -47,6 +48,7 @@ export function RouteMap({
   selectedPoint,
   recommendations,
   selectedStationId,
+  searchPlaybackProgress,
   onPointChange,
   onInvalidPoint,
   onStationSelect,
@@ -60,6 +62,7 @@ export function RouteMap({
   const boundaryLayerRef = useRef<L.GeoJSON | null>(null);
   const stationLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.Polyline | null>(null);
+  const searchTraceLayerRef = useRef<L.LayerGroup | null>(null);
   const startSnapLayerRef = useRef<L.Polyline | null>(null);
   const stationSnapLayerRef = useRef<L.Polyline | null>(null);
   const basemapRef = useRef<Basemap>(basemap);
@@ -80,6 +83,7 @@ export function RouteMap({
       MIN_ZOOM,
     );
     stationLayerRef.current = L.layerGroup().addTo(map);
+    searchTraceLayerRef.current = L.layerGroup().addTo(map);
     map.on("click", (event) => {
       const point = fromMapPoint({ lat: event.latlng.lat, lng: event.latlng.lng }, basemapRef.current);
       if (boundaryRef.current && !pointInBoundary(point, boundaryRef.current)) {
@@ -164,6 +168,7 @@ export function RouteMap({
     if (!map || !stationLayerRef.current) return;
 
     stationLayerRef.current.clearLayers();
+    searchTraceLayerRef.current?.clearLayers();
     removePolyline(routeLayerRef);
     removePolyline(startSnapLayerRef);
     removePolyline(stationSnapLayerRef);
@@ -181,6 +186,24 @@ export function RouteMap({
     });
 
     if (!selectedPoint || !selectedRecommendation?.route_coordinates.length) return;
+
+    const tracePoints = selectedRecommendation.expanded_trace_coordinates;
+    const visibleTraceCount = Math.max(0, Math.ceil(tracePoints.length * searchPlaybackProgress));
+    const visibleTrace = tracePoints.slice(0, visibleTraceCount).map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap)));
+    if (visibleTrace.length && searchTraceLayerRef.current) {
+      L.polyline(visibleTrace, { color: "#7c3aed", weight: 3, opacity: 0.38 }).addTo(searchTraceLayerRef.current);
+      visibleTrace.forEach((point, index) => {
+        const opacity = 0.18 + (index / Math.max(visibleTrace.length - 1, 1)) * 0.42;
+        L.circleMarker(point, {
+          radius: 2.8,
+          color: "#6d28d9",
+          weight: 0,
+          fillColor: "#8b5cf6",
+          fillOpacity: opacity,
+          interactive: false,
+        }).addTo(searchTraceLayerRef.current as L.LayerGroup);
+      });
+    }
 
     routeLayerRef.current = L.polyline(
       selectedRecommendation.route_coordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))),
@@ -235,7 +258,7 @@ export function RouteMap({
         { color: "#f97316", weight: 4, opacity: 0.92, dashArray: "8,8" },
       ).addTo(map);
     }
-  }, [basemap, onStationSelect, recommendations, selectedPoint, selectedRecommendation]);
+  }, [basemap, onStationSelect, recommendations, searchPlaybackProgress, selectedPoint, selectedRecommendation]);
 
   return <div className="map-canvas" ref={containerRef} />;
 }

@@ -108,6 +108,10 @@ def _row_to_item(row: pd.Series) -> RecommendationItem:
             (_required_float(point[0]), _required_float(point[1]))
             for point in _safe_list(row.get("route_coordinates"))
         ],
+        expanded_trace_coordinates=[
+            (_required_float(point[0]), _required_float(point[1]))
+            for point in _safe_list(row.get("expanded_trace_coordinates"))
+        ],
         distance_km=_optional_float(row.get("distance_km")),
         drive_time_min=_optional_float(row.get("drive_time_min")),
         road_snap_distance_m=_optional_float(row.get("road_snap_distance_m")),

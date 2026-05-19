@@ -63,6 +63,7 @@ def recommend_charging_stations(
             constraints,
         )
         route_coordinates = _path_to_route_coordinates(search_graph, search.path)
+        expanded_trace_coordinates = _nodes_to_coordinates(search_graph, search.expanded_trace)
         results.append(
             {
                 "station_id": int(station["station_id"]),
@@ -70,6 +71,7 @@ def recommend_charging_stations(
                 "algorithm": search.algorithm,
                 "path": search.path,
                 "route_coordinates": route_coordinates,
+                "expanded_trace_coordinates": expanded_trace_coordinates,
                 "start_node": str(start_node),
                 "start_node_latitude": start_node_latitude,
                 "start_node_longitude": start_node_longitude,
@@ -122,6 +124,16 @@ def _path_to_route_coordinates(graph, path: list[str]) -> list[tuple[float, floa
     return coordinates
 
 
+def _nodes_to_coordinates(graph, nodes: list[str]) -> list[tuple[float, float]]:
+    coordinates = []
+    for node in nodes:
+        try:
+            coordinates.append(_node_coordinates(graph, node))
+        except KeyError:
+            continue
+    return coordinates
+
+
 def _edge_route_coordinates(graph, u: str, v: str) -> list[tuple[float, float]]:
     edge_data = graph.get_edge_data(u, v, default={})
     if not edge_data:
@@ -149,6 +161,7 @@ def _rejected_result(station: pd.Series, algorithm: str, reason: str) -> dict:
         "algorithm": algorithm,
         "path": [],
         "route_coordinates": [],
+        "expanded_trace_coordinates": [],
         "start_node": None,
         "start_node_latitude": None,
         "start_node_longitude": None,

@@ -118,6 +118,27 @@ input:focus {
   background: #94a3b8;
 }
 
+.playback-controls {
+  display: grid;
+  grid-template-columns: 76px 76px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.playback-controls button {
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  background: #ffffff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.playback-controls input {
+  padding: 0;
+}
+
 .summary-block {
   display: grid;
   gap: 8px;

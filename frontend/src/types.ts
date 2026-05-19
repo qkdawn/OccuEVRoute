@@ -34,6 +34,7 @@ export interface RecommendationItem {
   start_node_longitude: number | null;
   start_snap_distance_m: number | null;
   route_coordinates: [number, number][];
+  expanded_trace_coordinates: [number, number][];
   distance_km: number | null;
   drive_time_min: number | null;
   road_snap_distance_m: number | null;

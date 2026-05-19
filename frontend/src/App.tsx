@@ -53,6 +53,8 @@ export function App() {
   const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
   const [boundary, setBoundary] = useState<BoundaryGeoJson | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPlaybackRunning, setIsPlaybackRunning] = useState(false);
+  const [searchPlaybackProgress, setSearchPlaybackProgress] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
   const selectedRecommendation = useMemo(() => {
@@ -67,6 +69,8 @@ export function App() {
     setSelectedPoint(point);
     setRecommendations([]);
     setSelectedStationId(null);
+    setIsPlaybackRunning(false);
+    setSearchPlaybackProgress(1);
     setError(null);
   }
 
@@ -74,6 +78,8 @@ export function App() {
     setSelectedPoint(null);
     setRecommendations([]);
     setSelectedStationId(null);
+    setIsPlaybackRunning(false);
+    setSearchPlaybackProgress(1);
     setError("Please choose a location within Shenzhen.");
   }
 
@@ -107,12 +113,30 @@ export function App() {
       setRecommendations(response.recommendations);
       setSubmittedPoint(selectedPoint);
       setSelectedStationId(response.recommendations[0]?.station_id ?? null);
+      setSearchPlaybackProgress(1);
+      setIsPlaybackRunning(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch recommendations.");
     } finally {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!isPlaybackRunning) return;
+    const timer = window.setInterval(() => {
+      setSearchPlaybackProgress((current) => {
+        const next = Math.min(1, current + 0.035);
+        if (next >= 1) window.clearInterval(timer);
+        return next;
+      });
+    }, 70);
+    return () => window.clearInterval(timer);
+  }, [isPlaybackRunning]);
+
+  useEffect(() => {
+    if (searchPlaybackProgress >= 1) setIsPlaybackRunning(false);
+  }, [searchPlaybackProgress]);
 
   return (
     <main className="app-shell">
@@ -167,6 +191,7 @@ export function App() {
           selectedPoint={selectedPoint}
           recommendations={recommendations}
           selectedStationId={selectedStationId}
+          searchPlaybackProgress={searchPlaybackProgress}
           onPointChange={handlePointChange}
           onInvalidPoint={handleInvalidPoint}
           onStationSelect={setSelectedStationId}
@@ -215,6 +240,47 @@ export function App() {
             </div>
           ) : (
             <span>No recommendations yet</span>
+          )}
+        </section>
+
+        <section className="summary-block">
+          <p className="eyebrow">Search Process</p>
+          {selectedRecommendation ? (
+            <>
+              <div className="metric-grid">
+                <Metric label="Algorithm" value={form.algorithm.toUpperCase()} />
+                <Metric label="Expanded" value={`${selectedRecommendation.expanded_nodes}`} />
+                <Metric label="Trace Points" value={`${selectedRecommendation.expanded_trace_coordinates.length}`} />
+                <Metric label="Runtime" value={`${selectedRecommendation.runtime_seconds.toFixed(3)} s`} />
+              </div>
+              <div className="playback-controls">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchPlaybackProgress(0);
+                    setIsPlaybackRunning(true);
+                  }}
+                >
+                  Replay
+                </button>
+                <button type="button" onClick={() => setIsPlaybackRunning((current) => !current)}>
+                  {isPlaybackRunning ? "Pause" : "Play"}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={searchPlaybackProgress}
+                  onChange={(event) => {
+                    setIsPlaybackRunning(false);
+                    setSearchPlaybackProgress(Number(event.target.value));
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <span>No search trace yet</span>
           )}
         </section>
 
