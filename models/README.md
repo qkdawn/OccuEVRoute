@@ -1,8 +1,8 @@
 # Models
 
-放训练后的模型产物，例如：
+This directory stores trained model artifacts, such as:
 
-- XGBoost waiting-time model。
-- feature schema。
-- scaler 或 encoder。
-- 训练指标摘要。
+- XGBoost waiting-time models.
+- Feature schemas.
+- Scalers or encoders.
+- Training metric summaries.

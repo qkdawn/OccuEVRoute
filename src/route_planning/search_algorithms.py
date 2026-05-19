@@ -8,6 +8,8 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
+from landmark_heuristic import LandmarkHeuristic
+
 
 DEFAULT_HEURISTIC_SPEED_KPH = 40.0
 
@@ -40,11 +42,38 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * radius_km * math.asin(math.sqrt(a))
 
 
-def _heuristic_minutes(graph, node: str, goal: str) -> float:
+def _straight_line_heuristic_minutes(graph, node: str, goal: str) -> float:
     node_lon, node_lat = _node_xy(graph, node)
     goal_lon, goal_lat = _node_xy(graph, goal)
     distance_km = _haversine_km(node_lat, node_lon, goal_lat, goal_lon)
     return distance_km / DEFAULT_HEURISTIC_SPEED_KPH * 60
+
+
+def _heuristic_minutes(graph, node: str, goal: str, landmark_heuristic: LandmarkHeuristic | None = None) -> float:
+    if landmark_heuristic is None:
+        return _straight_line_heuristic_minutes(graph, node, goal)
+
+    if node == "__start_access__":
+        start_estimate = _start_access_landmark_heuristic(graph, goal, landmark_heuristic)
+        if start_estimate is not None:
+            return start_estimate
+        raise ValueError("ALT landmark table cannot estimate the temporary start access node.")
+
+    estimate = landmark_heuristic.estimate_minutes(node, goal)
+    if estimate is None:
+        raise ValueError(f"ALT landmark table is missing node data for {node!r} or goal {goal!r}.")
+    return estimate
+
+
+def _start_access_landmark_heuristic(graph, goal: str, landmark_heuristic: LandmarkHeuristic) -> float | None:
+    estimates = []
+    for neighbor in graph.successors("__start_access__"):
+        neighbor_estimate = landmark_heuristic.estimate_minutes(neighbor, goal)
+        if neighbor_estimate is None:
+            continue
+        _, travel_time_s = _edge_metrics(graph, "__start_access__", neighbor)
+        estimates.append(travel_time_s / 60 + neighbor_estimate)
+    return min(estimates) if estimates else None
 
 
 def _best_edge_metric(edge_data: dict, key: str, default: float = 0.0) -> float:
@@ -140,9 +169,9 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
     return _not_found("ucs", started, expanded)
 
 
-def astar_search(graph, start: str, goal: str) -> SearchResult:
+def astar_search(graph, start: str, goal: str, landmark_heuristic: LandmarkHeuristic | None = None) -> SearchResult:
     started = time.perf_counter()
-    heap = [(_heuristic_minutes(graph, start, goal), 0.0, start, [start])]
+    heap = [(_heuristic_minutes(graph, start, goal, landmark_heuristic), 0.0, start, [start])]
     best_cost = {start: 0.0}
     expanded = 0
 
@@ -158,17 +187,23 @@ def astar_search(graph, start: str, goal: str) -> SearchResult:
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost
-                priority = new_cost + _heuristic_minutes(graph, neighbor, goal)
+                priority = new_cost + _heuristic_minutes(graph, neighbor, goal, landmark_heuristic)
                 heapq.heappush(heap, (priority, new_cost, neighbor, path + [neighbor]))
     return _not_found("astar", started, expanded)
 
 
-def run_search(graph, start: str, goal: str, algorithm: str) -> SearchResult:
+def run_search(
+    graph,
+    start: str,
+    goal: str,
+    algorithm: str,
+    landmark_heuristic: LandmarkHeuristic | None = None,
+) -> SearchResult:
     algorithm = algorithm.lower()
     if algorithm == "bfs":
         return bfs_search(graph, start, goal)
     if algorithm == "ucs":
         return ucs_search(graph, start, goal)
     if algorithm in {"astar", "a*"}:
-        return astar_search(graph, start, goal)
+        return astar_search(graph, start, goal, landmark_heuristic)
     raise ValueError(f"Unsupported algorithm: {algorithm}")

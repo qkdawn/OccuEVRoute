@@ -1,0 +1,14 @@
+feature,mean_abs_shap
+station_id,0.039811924
+e_price,0.038428232
+charge_count,0.030988775
+s_price,0.020555926
+hour,0.018413832
+temperature,0.0038806843
+weekday,0.0034614827
+humidity,0.0019969707
+is_holiday,0.0014406767
+rain,0.001249016
+is_evening_peak,9.173018e-05
+minute,8.7323424e-05
+is_morning_peak,2.4641648e-05

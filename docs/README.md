@@ -1,9 +1,9 @@
 # Docs
 
-放课程项目相关文档：
+Course project documentation lives here:
 
-- `proposal/`: 选题 proposal、可行性调研、需求整理。
-- `report/`: 最终报告、实验说明、方法说明。
-- `slides/`: 展示 PPT、答辩素材。
+- `proposal/`: Topic proposal, feasibility notes, and requirements.
+- `report/`: Final report, experiments, and method descriptions.
+- `slides/`: Presentation decks and defense materials.
 
-建议把原始 proposal 文档复制到 `docs/proposal/`，后续报告和展示材料都从这里统一管理。
+Keep the original proposal under `docs/proposal/` so later reports and slides can reference one shared source.

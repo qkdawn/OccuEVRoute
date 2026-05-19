@@ -1,19 +1,24 @@
 """Download Shenzhen road network in tiles and merge it into one GraphML.
 
 This is more reliable than one large Overpass request. Tiles are built from
-the UrbanEV station coordinate bounding box, and every tile is downloaded from
-OpenStreetMap as a real drive network.
+the UrbanEV station coordinate bounding box. The downloaded network includes
+regular drivable roads plus public service roads such as parking aisles and
+campus/internal access roads, while filtering out private/no-access edges.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
+import json
 import time
 from pathlib import Path
+from typing import Any
 
 import networkx as nx
 import osmnx as ox
 import pandas as pd
+from shapely.geometry import Point, shape
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -28,9 +33,17 @@ DEFAULT_STATION_FILE = (
     / "station_inf.csv"
 )
 DEFAULT_OUTPUT_FILE = PROJECT_ROOT / "data" / "external" / "shenzhen_drive.graphml"
-DEFAULT_TILE_DIR = PROJECT_ROOT / "data" / "external" / "road_tiles"
+DEFAULT_BOUNDARY_FILE = PROJECT_ROOT / "data" / "processed" / "shenzhen_boundary.geojson"
+DEFAULT_TILE_DIR = PROJECT_ROOT / "data" / "external" / "road_tiles_public_drive"
 DEFAULT_CACHE_DIR = PROJECT_ROOT / "data" / "external" / "osmnx_cache"
 DEFAULT_SPEED_KPH = 40
+DISALLOWED_ACCESS_VALUES = {"private", "no"}
+DRIVE_SERVICE_FILTER = (
+    '["highway"~"motorway|trunk|primary|secondary|tertiary|unclassified|'
+    'residential|living_street|motorway_link|trunk_link|primary_link|'
+    'secondary_link|tertiary_link|service"]'
+    '["access"!~"private|no"]'
+)
 
 
 def station_bounds(station_file: Path, padding_degrees: float) -> tuple[float, float, float, float]:
@@ -92,6 +105,35 @@ def add_travel_times(graph):
     return graph
 
 
+def remove_private_access_edges(graph: nx.MultiDiGraph) -> int:
+    blocked_edges = []
+    for u, v, key, attrs in graph.edges(keys=True, data=True):
+        if _has_disallowed_access(attrs.get("access")):
+            blocked_edges.append((u, v, key))
+    graph.remove_edges_from(blocked_edges)
+    graph.remove_nodes_from(list(nx.isolates(graph)))
+    return len(blocked_edges)
+
+
+def _has_disallowed_access(value: Any) -> bool:
+    return any(str(item).strip().lower() in DISALLOWED_ACCESS_VALUES for item in _as_list(value))
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    if isinstance(value, str) and value.startswith("["):
+        try:
+            parsed = ast.literal_eval(value)
+        except (SyntaxError, ValueError):
+            return [value]
+        if isinstance(parsed, (list, tuple, set)):
+            return list(parsed)
+    return [value]
+
+
 def download_tile(
     row: int,
     col: int,
@@ -105,7 +147,11 @@ def download_tile(
     tile_path = tile_dir / f"tile_r{row:02d}_c{col:02d}.graphml"
     if tile_path.exists():
         print(f"Using existing tile r{row} c{col}: {tile_path}")
-        return ox.load_graphml(tile_path)
+        graph = ox.load_graphml(tile_path)
+        removed = remove_private_access_edges(graph)
+        if removed:
+            print(f"Removed {removed:,} private/no-access edges from cached tile r{row} c{col}")
+        return graph
 
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
@@ -117,11 +163,16 @@ def download_tile(
             graph = ox.graph_from_bbox(
                 (west, south, east, north),
                 network_type="drive",
+                custom_filter=DRIVE_SERVICE_FILTER,
                 simplify=True,
             )
+            removed = remove_private_access_edges(graph)
             graph = add_travel_times(graph)
             ox.save_graphml(graph, tile_path)
-            print(f"Saved tile r{row} c{col}: nodes={len(graph.nodes):,}, edges={len(graph.edges):,}")
+            print(
+                f"Saved tile r{row} c{col}: nodes={len(graph.nodes):,}, "
+                f"edges={len(graph.edges):,}, filtered_edges={removed:,}"
+            )
             return graph
         except Exception as exc:
             last_error = exc
@@ -137,14 +188,46 @@ def merge_graphs(graphs: list) -> nx.MultiDiGraph:
 
     merged = nx.compose_all(graphs)
     merged.graph.update(graphs[0].graph)
-    merged.graph["name"] = "shenzhen_drive_tiled"
+    merged.graph["name"] = "shenzhen_public_drive_tiled"
+    removed = remove_private_access_edges(merged)
+    if removed:
+        print(f"Removed {removed:,} private/no-access edges after merging tiles")
     return merged
+
+
+def clip_to_boundary_main_component(graph: nx.MultiDiGraph, boundary_file: Path) -> tuple[nx.MultiDiGraph, int, int]:
+    if not boundary_file.exists():
+        raise FileNotFoundError(f"Boundary GeoJSON not found: {boundary_file}")
+
+    with boundary_file.open("r", encoding="utf-8") as file:
+        geojson = json.load(file)
+    boundary = shape(geojson["features"][0]["geometry"])
+
+    outside_nodes = [
+        node
+        for node, attrs in graph.nodes(data=True)
+        if not boundary.covers(Point(float(attrs["x"]), float(attrs["y"])))
+    ]
+    clipped = graph.copy()
+    clipped.remove_nodes_from(outside_nodes)
+    clipped.remove_nodes_from(list(nx.isolates(clipped)))
+    if clipped.number_of_nodes() == 0:
+        raise ValueError("No road graph nodes remain after Shenzhen boundary clipping.")
+
+    components = sorted(nx.weakly_connected_components(clipped), key=len, reverse=True)
+    main_component = set(components[0])
+    off_component_nodes = [node for node in clipped.nodes if node not in main_component]
+    clipped.remove_nodes_from(off_component_nodes)
+    clipped.graph.update(graph.graph)
+    clipped.graph["name"] = "shenzhen_public_drive_main_component"
+    return clipped, len(outside_nodes), len(off_component_nodes)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download Shenzhen road network by tiles.")
     parser.add_argument("--station-file", type=Path, default=DEFAULT_STATION_FILE)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_FILE)
+    parser.add_argument("--boundary", type=Path, default=DEFAULT_BOUNDARY_FILE)
     parser.add_argument("--tile-dir", type=Path, default=DEFAULT_TILE_DIR)
     parser.add_argument("--padding-degrees", type=float, default=0.02)
     parser.add_argument("--overlap-degrees", type=float, default=0.003)
@@ -169,10 +252,9 @@ def main() -> None:
 
     west, south, east, north = station_bounds(args.station_file, args.padding_degrees)
     tiles = make_tiles(west, south, east, north, args.cols, args.rows, args.overlap_degrees)
-    print(
-        f"Station bounds with padding: west={west}, south={south}, east={east}, north={north}"
-    )
+    print(f"Station bounds with padding: west={west}, south={south}, east={east}, north={north}")
     print(f"Downloading {len(tiles)} tiles ({args.rows} rows x {args.cols} cols)")
+    print(f"Using custom OSM filter: {DRIVE_SERVICE_FILTER}")
 
     graphs = []
     for row, col, tile_west, tile_south, tile_east, tile_north in tiles:
@@ -189,6 +271,9 @@ def main() -> None:
         graphs.append(graph)
 
     merged = merge_graphs(graphs)
+    merged, outside_nodes, off_component_nodes = clip_to_boundary_main_component(merged, args.boundary)
+    print(f"Removed {outside_nodes:,} nodes outside Shenzhen boundary")
+    print(f"Removed {off_component_nodes:,} nodes outside the main Shenzhen road component")
     ox.save_graphml(merged, args.output)
     print(f"Saved merged road network: {args.output}")
     print(f"Nodes: {len(merged.nodes):,}")

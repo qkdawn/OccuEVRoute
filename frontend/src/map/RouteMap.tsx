@@ -1,0 +1,383 @@
+import { useEffect, useMemo, useRef } from "react";
+import L from "leaflet";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
+import type { Basemap, BoundaryGeoJson, BoundaryGeometry, Point, RecommendationItem } from "../types";
+import { fromMapPoint, toMapPoint } from "./coordinates";
+
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
+
+const DEFAULT_CENTER: Point = { lat: 22.65, lng: 114.05 };
+const MIN_ZOOM = 10;
+
+const BASEMAPS: Record<Basemap, { url: string; attribution: string }> = {
+  gaode: {
+    url: "https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+    attribution: "Amap",
+  },
+  carto: {
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+  },
+  osm: {
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap contributors",
+  },
+};
+
+interface RouteMapProps {
+  basemap: Basemap;
+  boundary: BoundaryGeoJson | null;
+  selectedPoint: Point | null;
+  recommendations: RecommendationItem[];
+  selectedStationId: number | null;
+  onPointChange: (point: Point) => void;
+  onInvalidPoint: () => void;
+  onStationSelect: (stationId: number) => void;
+}
+
+export function RouteMap({
+  basemap,
+  boundary,
+  selectedPoint,
+  recommendations,
+  selectedStationId,
+  onPointChange,
+  onInvalidPoint,
+  onStationSelect,
+}: RouteMapProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const boundaryRef = useRef<BoundaryGeoJson | null>(boundary);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const selectedMarkerRef = useRef<L.Marker | null>(null);
+  const boundaryMaskRef = useRef<L.Polygon | null>(null);
+  const boundaryLayerRef = useRef<L.GeoJSON | null>(null);
+  const stationLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeLayerRef = useRef<L.Polyline | null>(null);
+  const startSnapLayerRef = useRef<L.Polyline | null>(null);
+  const stationSnapLayerRef = useRef<L.Polyline | null>(null);
+  const basemapRef = useRef<Basemap>(basemap);
+  const hasFitBoundaryRef = useRef(false);
+
+  useEffect(() => {
+    boundaryRef.current = boundary;
+  }, [boundary]);
+
+  const selectedRecommendation = useMemo(() => {
+    return recommendations.find((item) => item.station_id === selectedStationId) ?? recommendations[0] ?? null;
+  }, [recommendations, selectedStationId]);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, { maxBoundsViscosity: 1.0, minZoom: MIN_ZOOM, zoomControl: true }).setView(
+      toLeaflet(toMapPoint(DEFAULT_CENTER, basemapRef.current)),
+      MIN_ZOOM,
+    );
+    stationLayerRef.current = L.layerGroup().addTo(map);
+    map.on("click", (event) => {
+      const point = fromMapPoint({ lat: event.latlng.lat, lng: event.latlng.lng }, basemapRef.current);
+      if (boundaryRef.current && !pointInBoundary(point, boundaryRef.current)) {
+        onInvalidPoint();
+        return;
+      }
+      onPointChange(point);
+    });
+    mapRef.current = map;
+  }, [onInvalidPoint, onPointChange]);
+
+  useEffect(() => {
+    basemapRef.current = basemap;
+    const map = mapRef.current;
+    if (!map) return;
+    if (tileLayerRef.current) tileLayerRef.current.remove();
+    const config = BASEMAPS[basemap];
+    tileLayerRef.current = L.tileLayer(config.url, {
+      attribution: config.attribution,
+      maxZoom: 19,
+    }).addTo(map);
+  }, [basemap]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!selectedPoint) {
+      if (selectedMarkerRef.current) {
+        selectedMarkerRef.current.remove();
+        selectedMarkerRef.current = null;
+      }
+      return;
+    }
+    const mapPoint = toMapPoint(selectedPoint, basemap);
+    if (!selectedMarkerRef.current) {
+      selectedMarkerRef.current = L.marker(toLeaflet(mapPoint), { title: "Current location" }).addTo(map);
+      map.setView(toLeaflet(mapPoint), 13);
+    } else {
+      selectedMarkerRef.current.setLatLng(toLeaflet(mapPoint));
+    }
+  }, [basemap, selectedPoint]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !boundary) return;
+    if (boundaryMaskRef.current) boundaryMaskRef.current.remove();
+    if (boundaryLayerRef.current) boundaryLayerRef.current.remove();
+    const mapBoundary = boundaryToMapGeoJson(boundary, basemap);
+    boundaryMaskRef.current = L.polygon(boundaryMaskRings(mapBoundary), {
+      color: "transparent",
+      fillColor: "#0f172a",
+      fillOpacity: 0.18,
+      fillRule: "evenodd",
+      interactive: false,
+      stroke: false,
+    }).addTo(map);
+    boundaryLayerRef.current = L.geoJSON(mapBoundary, {
+      interactive: false,
+      style: {
+        color: "#0f766e",
+        weight: 2,
+        opacity: 0.9,
+        fillOpacity: 0,
+      },
+    }).addTo(map);
+    boundaryMaskRef.current.bringToBack();
+    boundaryLayerRef.current.bringToBack();
+    const bounds = boundaryBounds(mapBoundary);
+    if (bounds.isValid()) {
+      const paddedBounds = bounds.pad(0.15);
+      map.setMaxBounds(paddedBounds);
+      map.setMinZoom(MIN_ZOOM);
+      if (!hasFitBoundaryRef.current) {
+        map.fitBounds(bounds, { animate: false, padding: [20, 20] });
+        hasFitBoundaryRef.current = true;
+      }
+    }
+  }, [basemap, boundary]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !stationLayerRef.current) return;
+
+    stationLayerRef.current.clearLayers();
+    removePolyline(routeLayerRef);
+    removePolyline(startSnapLayerRef);
+    removePolyline(stationSnapLayerRef);
+
+    recommendations.forEach((item, index) => {
+      if (item.station_id === null || item.station_latitude === null || item.station_longitude === null) return;
+      const isSelected = item.station_id === selectedRecommendation?.station_id;
+      const marker = L.marker(toLeaflet(toMapPoint({ lat: item.station_latitude, lng: item.station_longitude }, basemap)), {
+        icon: stationIcon(isSelected),
+        title: item.station_display_name ?? `station_id=${item.station_id}`,
+      });
+      marker.bindTooltip(stationTooltip(item, index + 1));
+      marker.on("click", () => onStationSelect(item.station_id as number));
+      marker.addTo(stationLayerRef.current as L.LayerGroup);
+    });
+
+    if (!selectedPoint || !selectedRecommendation?.route_coordinates.length) return;
+
+    routeLayerRef.current = L.polyline(
+      selectedRecommendation.route_coordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))),
+      { color: "#2563eb", weight: 5, opacity: 0.86 },
+    ).addTo(map);
+
+    if (selectedRecommendation.start_node_latitude !== null && selectedRecommendation.start_node_longitude !== null) {
+      startSnapLayerRef.current = L.polyline(
+        [
+          toLeaflet(toMapPoint(selectedPoint, basemap)),
+          toLeaflet(
+            toMapPoint(
+              {
+                lat: selectedRecommendation.start_node_latitude,
+                lng: selectedRecommendation.start_node_longitude,
+              },
+              basemap,
+            ),
+          ),
+        ],
+        { color: "#f97316", weight: 4, opacity: 0.92, dashArray: "8,8" },
+      ).addTo(map);
+    }
+
+    if (
+      selectedRecommendation.station_road_latitude !== null &&
+      selectedRecommendation.station_road_longitude !== null &&
+      selectedRecommendation.station_latitude !== null &&
+      selectedRecommendation.station_longitude !== null
+    ) {
+      stationSnapLayerRef.current = L.polyline(
+        [
+          toLeaflet(
+            toMapPoint(
+              {
+                lat: selectedRecommendation.station_road_latitude,
+                lng: selectedRecommendation.station_road_longitude,
+              },
+              basemap,
+            ),
+          ),
+          toLeaflet(
+            toMapPoint(
+              {
+                lat: selectedRecommendation.station_latitude,
+                lng: selectedRecommendation.station_longitude,
+              },
+              basemap,
+            ),
+          ),
+        ],
+        { color: "#f97316", weight: 4, opacity: 0.92, dashArray: "8,8" },
+      ).addTo(map);
+    }
+  }, [basemap, onStationSelect, recommendations, selectedPoint, selectedRecommendation]);
+
+  return <div className="map-canvas" ref={containerRef} />;
+}
+
+function toLeaflet(point: Point): L.LatLngExpression {
+  return [point.lat, point.lng];
+}
+
+function removePolyline(ref: React.MutableRefObject<L.Polyline | null>) {
+  if (ref.current) {
+    ref.current.remove();
+    ref.current = null;
+  }
+}
+
+function stationIcon(selected: boolean) {
+  const color = selected ? "#ef4444" : "#16a34a";
+  return L.divIcon({
+    className: "",
+    html: `<div class="station-marker" style="background:${color}"></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
+function stationTooltip(item: RecommendationItem, rank: number) {
+  const arrival = item.arrival_soc === null ? "" : `${(item.arrival_soc * 100).toFixed(1)}%`;
+  const snap = item.road_snap_distance_m === null ? "" : item.road_snap_distance_m.toFixed(1);
+  return (
+    `Top ${rank} | ${item.station_display_name ?? `station_id: ${item.station_id}`}<br>` +
+    `drive_time_min: ${formatMetric(item.drive_time_min)}<br>` +
+    `distance_km: ${formatMetric(item.distance_km)}<br>` +
+    `road_snap_distance_m: ${snap}<br>` +
+    `charge_count: ${item.charge_count ?? ""}<br>` +
+    `nearby_poi: ${formatPoiSummary(item)}<br>` +
+    `arrival_soc: ${arrival}`
+  );
+}
+
+function formatMetric(value: number | null) {
+  return value === null ? "" : value.toFixed(2);
+}
+
+function formatPoiSummary(item: RecommendationItem) {
+  if (item.poi_total_count === null) return "";
+  return `${item.poi_total_count} / ${item.poi_lifestyle_services_count ?? 0} / ${item.poi_food_beverage_count ?? 0} / ${item.poi_business_residential_count ?? 0}`;
+}
+
+function boundaryToMapGeoJson(boundary: BoundaryGeoJson, basemap: Basemap): BoundaryGeoJson {
+  return {
+    ...boundary,
+    features: boundary.features.map((feature) => ({
+      ...feature,
+      geometry: transformGeometry(feature.geometry, basemap),
+    })),
+  };
+}
+
+function transformGeometry(geometry: BoundaryGeometry, basemap: Basemap): BoundaryGeometry {
+  if (geometry.type === "Polygon") {
+    return {
+      type: "Polygon",
+      coordinates: [geometry.coordinates[0].map((coordinate) => transformCoordinate(coordinate, basemap))],
+    };
+  }
+  return {
+    type: "MultiPolygon",
+    coordinates: geometry.coordinates.map((polygon) =>
+      [polygon[0].map((coordinate) => transformCoordinate(coordinate, basemap))],
+    ),
+  };
+}
+
+function transformCoordinate(coordinate: number[], basemap: Basemap): number[] {
+  const point = toMapPoint({ lng: coordinate[0], lat: coordinate[1] }, basemap);
+  return [point.lng, point.lat];
+}
+
+function boundaryMaskRings(boundary: BoundaryGeoJson): L.LatLngExpression[][] {
+  const worldRing: L.LatLngExpression[] = [
+    [-90, -180],
+    [-90, 180],
+    [90, 180],
+    [90, -180],
+  ];
+  const holes: L.LatLngExpression[][] = [];
+  boundary.features.forEach((feature) => {
+    collectOuterRings(feature.geometry).forEach((ring) => {
+      holes.push(ring.map((coordinate) => [coordinate[1], coordinate[0]]));
+    });
+  });
+  return [worldRing, ...holes];
+}
+
+function collectOuterRings(geometry: BoundaryGeometry): number[][][] {
+  if (geometry.type === "Polygon") return geometry.coordinates.length ? [geometry.coordinates[0]] : [];
+  return geometry.coordinates.flatMap((polygon) => (polygon.length ? [polygon[0]] : []));
+}
+
+function boundaryBounds(boundary: BoundaryGeoJson): L.LatLngBounds {
+  const bounds = L.latLngBounds([]);
+  boundary.features.forEach((feature) => extendBoundsWithGeometry(bounds, feature.geometry));
+  return bounds;
+}
+
+function extendBoundsWithGeometry(bounds: L.LatLngBounds, geometry: BoundaryGeometry) {
+  if (geometry.type === "Polygon") {
+    geometry.coordinates.forEach((ring) => extendBoundsWithRing(bounds, ring));
+    return;
+  }
+  geometry.coordinates.forEach((polygon) => {
+    polygon.forEach((ring) => extendBoundsWithRing(bounds, ring));
+  });
+}
+
+function extendBoundsWithRing(bounds: L.LatLngBounds, ring: number[][]) {
+  ring.forEach((coordinate) => bounds.extend([coordinate[1], coordinate[0]]));
+}
+
+function pointInBoundary(point: Point, boundary: BoundaryGeoJson): boolean {
+  return boundary.features.some((feature) => pointInGeometry(point, feature.geometry));
+}
+
+function pointInGeometry(point: Point, geometry: BoundaryGeometry): boolean {
+  if (geometry.type === "Polygon") return pointInPolygon(point, geometry.coordinates);
+  return geometry.coordinates.some((polygon) => pointInPolygon(point, polygon));
+}
+
+function pointInPolygon(point: Point, polygon: number[][][]): boolean {
+  if (!polygon.length || !pointInRing(point, polygon[0])) return false;
+  return !polygon.slice(1).some((hole) => pointInRing(point, hole));
+}
+
+function pointInRing(point: Point, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersects = yi > point.lat !== yj > point.lat && point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}

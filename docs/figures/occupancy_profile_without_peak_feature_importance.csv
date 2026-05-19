@@ -1,0 +1,13 @@
+feature,mean_abs_shap
+station_avg_occupancy,0.14293316
+hour,0.020536417
+temperature,0.006582438
+e_price,0.00516765
+weekday,0.0045139696
+station_id,0.0034430742
+humidity,0.0031489423
+s_price,0.0029062326
+charge_count,0.002561431
+is_holiday,0.0018213335
+rain,0.0015909215
+minute,0.0005927316

@@ -1,36 +1,82 @@
 # OccuEVRoute
 
-智能电动车充电路线规划课程项目。
+Course project for intelligent EV charging route planning.
 
-这个项目要做的是：给定起点、终点、车辆电量和用户偏好，系统综合考虑距离、电量、等待时间、电价和充电站约束，推荐一条更合适的充电路线。
+Given a user location, vehicle battery state, and user constraints, the system recommends suitable charging stations and routes by combining road-network search, battery feasibility, charger availability, station access distance, and nearby POI context.
 
-## 目录结构
+## Project Structure
 
 ```text
 OccuEVRoute/
-├── app/              # 最后展示用的 Streamlit 界面
-├── data/             # 小数据、样例数据、处理后的数据
-├── docs/             # proposal、报告、PPT
-├── ML/               # 已下载的 UrbanEV 原始大数据
-├── models/           # 训练好的 XGBoost 模型
-└── src/              # 核心代码
+├── backend/          # FastAPI recommendation service
+├── frontend/         # React + Vite + Leaflet frontend
+├── data/             # Small inputs, samples, and processed data
+├── docs/             # Proposal, report, and slide materials
+├── ML/               # Downloaded UrbanEV raw datasets
+├── models/           # Trained XGBoost models and artifacts
+└── src/              # Core project code
 ```
 
-## src 里面怎么放
+## Source Layout
 
 ```text
 src/
-├── data_processing/      # 读数据、清洗数据、做特征
-├── route_planning/       # BFS / UCS / A*、电量约束、路线规划
-├── waiting_prediction/   # XGBoost 等待时间预测
-└── utils/                # 通用小工具
+├── data_processing/      # Data loading, cleaning, and feature generation
+├── route_planning/       # BFS / UCS / A*, energy constraints, and route planning
+└── waiting_prediction/   # XGBoost waiting-time and occupancy analysis
 ```
 
-## 推荐开发顺序
+## Run the Application
 
-1. 先在 `src/route_planning/` 做一个 toy graph，把 BFS / UCS / A* 跑通。
-2. 再在 `src/data_processing/` 读取 UrbanEV 站点数据，整理出 10-20 个候选站点。
-3. 然后在 `src/waiting_prediction/` 训练 XGBoost，预测等待时间。
-4. 最后在 `app/` 做 Streamlit 页面，把路线、站点、等待时间和算法对比展示出来。
+Docker:
 
-大型数据暂时继续放在 `ML/Data/`，不用移动。
+```powershell
+docker compose up --build
+```
+
+Then open `http://localhost:9090`.
+
+Backend:
+
+```powershell
+python -m uvicorn backend.main:app --reload --port 9000
+```
+
+Frontend:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Then open `http://localhost:5173`.
+
+## Data Preparation
+
+Route recommendation uses the enhanced road network by default:
+
+- `data/processed/shenzhen_drive_with_station_access.graphml`
+- `data/processed/station_road_access.csv`
+- `data/processed/landmark_distances.npz`
+- `data/processed/station_poi_features.csv`
+- `data/processed/shenzhen_boundary.geojson`
+
+If these files are missing, run:
+
+```powershell
+python src/data_processing/build_shenzhen_boundary_geojson.py
+python src/data_processing/download_road_network_tiles.py
+python src/data_processing/build_station_graph.py
+python src/data_processing/build_station_poi_features.py
+python src/data_processing/build_landmark_distances.py
+```
+
+The road download step includes regular drivable roads plus `highway=service`
+internal roads, filters out `access=private/no` edges, clips the merged graph
+to the Shenzhen boundary, and keeps the main Shenzhen road component. Station
+features are also filtered to the Shenzhen boundary. A* uses the generated
+16-landmark ALT table with directed forward/reverse distances and an undirected
+fallback table.
+
+Large raw datasets remain under `ML/Data/`.

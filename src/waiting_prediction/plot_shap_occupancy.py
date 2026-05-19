@@ -1,10 +1,7 @@
 """Train an occupancy model and plot SHAP feature importance.
 
-This script answers a narrow question for the project report:
-is `month` important compared with weekday, clock time, weather, and station id?
-
-It predicts occupancy_rate = busy / (busy + idle) using a balanced sample from
-station-level 5-minute data, joins hourly central weather, then saves SHAP plots.
+It predicts occupancy_rate = busy / (busy + idle) using deployable context
+features plus historical station profile features, then saves SHAP plots.
 """
 
 from __future__ import annotations
@@ -48,16 +45,81 @@ FEATURES = [
     "station_id",
     "weekday",
     "hour",
-    "minute",
-    "is_weekend",
-    "month",
+    "is_holiday",
     "temperature",
     "humidity",
     "rain",
     "charge_count",
     "s_price",
     "e_price",
+    "station_avg_occupancy",
+    "station_avg_duration",
 ]
+
+CHINA_HOLIDAYS = {
+    "2022-09-10",
+    "2022-09-11",
+    "2022-09-12",
+    "2022-10-01",
+    "2022-10-02",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-05",
+    "2022-10-06",
+    "2022-10-07",
+    "2022-12-31",
+    "2023-01-01",
+    "2023-01-02",
+    "2023-01-21",
+    "2023-01-22",
+    "2023-01-23",
+    "2023-01-24",
+    "2023-01-25",
+    "2023-01-26",
+    "2023-01-27",
+}
+
+
+def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["weekday"] = df["time"].dt.dayofweek
+    df["hour"] = df["time"].dt.hour
+    df["minute"] = df["time"].dt.minute
+    df["is_holiday"] = df["time"].dt.strftime("%Y-%m-%d").isin(CHINA_HOLIDAYS).astype(int)
+    df["is_morning_peak"] = df["hour"].between(7, 9).astype(int)
+    df["is_evening_peak"] = df["hour"].between(17, 19).astype(int)
+    return df
+
+
+def fit_station_profiles(df: pd.DataFrame) -> dict[str, object]:
+    peak_mask = (df["is_morning_peak"] == 1) | (df["is_evening_peak"] == 1)
+    return {
+        "global_avg": float(df["occupancy_rate"].mean()),
+        "global_duration": float(df["duration"].mean()),
+        "station_avg": df.groupby("station_id")["occupancy_rate"].mean(),
+        "station_duration_avg": df.groupby("station_id")["duration"].mean(),
+        "station_peak_avg": df.loc[peak_mask].groupby("station_id")["occupancy_rate"].mean(),
+    }
+
+
+def apply_station_profiles(df: pd.DataFrame, profiles: dict[str, object]) -> pd.DataFrame:
+    df = df.copy()
+    global_avg = float(profiles["global_avg"])
+    global_duration = float(profiles["global_duration"])
+    station_avg = profiles["station_avg"]
+    station_duration_avg = profiles["station_duration_avg"]
+    peak_avg = profiles["station_peak_avg"]
+
+    df["station_avg_occupancy"] = df["station_id"].map(station_avg).fillna(global_avg)
+    df["station_avg_duration"] = df["station_id"].map(station_duration_avg).fillna(
+        global_duration
+    )
+
+    df["station_peak_avg_occupancy"] = df["station_id"].map(peak_avg)
+    df["station_peak_avg_occupancy"] = df["station_peak_avg_occupancy"].fillna(
+        df["station_avg_occupancy"]
+    )
+    return df
 
 
 def load_weather(weather_file: Path) -> pd.DataFrame:
@@ -88,8 +150,14 @@ def load_station_sample(
         station_id = int(path.stem)
         df = pd.read_csv(
             path,
-            usecols=["time", "busy", "idle", "s_price", "e_price"],
+            usecols=["time", "busy", "idle", "s_price", "e_price", "duration"],
         )
+        df["time"] = pd.to_datetime(df["time"])
+        df["duration"] = pd.to_numeric(df["duration"], errors="coerce").fillna(0.0)
+        denominator = df["busy"] + df["idle"]
+        df = df[denominator > 0].copy()
+        df["occupancy_rate"] = df["busy"] / (df["busy"] + df["idle"])
+        df = add_time_features(df)
         if rows_per_station > 0 and len(df) > rows_per_station:
             df = df.sample(rows_per_station, random_state=random_seed + station_id)
         df["station_id"] = station_id
@@ -107,34 +175,28 @@ def load_station_info(station_dir: Path) -> pd.DataFrame:
 
 def build_training_frame(station_data: pd.DataFrame, weather: pd.DataFrame) -> pd.DataFrame:
     df = station_data.copy()
-    df["time"] = pd.to_datetime(df["time"])
-    denominator = df["busy"] + df["idle"]
-    df = df[denominator > 0].copy()
-    df["occupancy_rate"] = df["busy"] / (df["busy"] + df["idle"])
-
-    df["weekday"] = df["time"].dt.dayofweek
-    df["hour"] = df["time"].dt.hour
-    df["minute"] = df["time"].dt.minute
-    df["is_weekend"] = (df["weekday"] >= 5).astype(int)
-    df["month"] = df["time"].dt.month
     df["weather_hour"] = df["time"].dt.floor("h")
 
     df = df.merge(weather, on="weather_hour", how="left")
     df[["temperature", "humidity", "rain"]] = df[
         ["temperature", "humidity", "rain"]
     ].ffill().bfill()
-    return df.dropna(subset=FEATURES + ["occupancy_rate"])
+    return df.dropna(subset=["occupancy_rate"])
 
 
 def train_model(df: pd.DataFrame, random_seed: int):
-    x = df[FEATURES]
-    y = df["occupancy_rate"]
-    x_train, x_test, y_train, y_test = train_test_split(
-        x,
-        y,
+    train_df, test_df = train_test_split(
+        df,
         test_size=0.25,
         random_state=random_seed,
     )
+    profiles = fit_station_profiles(train_df)
+    train_df = apply_station_profiles(train_df, profiles)
+    test_df = apply_station_profiles(test_df, profiles)
+    x_train = train_df[FEATURES]
+    y_train = train_df["occupancy_rate"]
+    x_test = test_df[FEATURES]
+    y_test = test_df["occupancy_rate"]
     model = XGBRegressor(
         objective="reg:squarederror",
         n_estimators=300,
@@ -150,7 +212,9 @@ def train_model(df: pd.DataFrame, random_seed: int):
     metrics = {
         "rows": len(df),
         "stations": int(df["station_id"].nunique()),
-        "months": ",".join(str(m) for m in sorted(df["month"].unique())),
+        "start_time": df["time"].min().isoformat(),
+        "end_time": df["time"].max().isoformat(),
+        "target": "occupancy_rate",
         "mae": float(mean_absolute_error(y_test, pred)),
         "r2": float(r2_score(y_test, pred)),
     }

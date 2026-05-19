@@ -16,12 +16,26 @@ class UserConstraints:
     battery_capacity_kwh: float = 60.0
     min_arrival_soc: float = 0.1
     min_charge_count: int = 1
-    consumption_kwh_per_km: float = 0.16
+    consumption_kwh_per_km: float = 0.188
+    max_road_snap_distance_m: float = 150.0
+    max_start_snap_distance_m: float = 300.0
 
 
 def pre_csp_check(station: pd.Series, constraints: UserConstraints) -> tuple[bool, str]:
     """Check station-only constraints before graph search."""
-    required = ["station_id", "road_node", "latitude", "longitude", "charge_count"]
+    required = [
+        "station_id",
+        "latitude",
+        "longitude",
+        "charge_count",
+        "road_edge_u",
+        "road_edge_v",
+        "road_edge_key",
+        "road_projection_latitude",
+        "road_projection_longitude",
+        "road_snap_distance_m",
+        "access_node",
+    ]
     for field in required:
         if field not in station or pd.isna(station[field]):
             return False, f"missing_{field}"
@@ -29,6 +43,8 @@ def pre_csp_check(station: pd.Series, constraints: UserConstraints) -> tuple[boo
         return False, "outside_search_radius"
     if int(station["charge_count"]) < constraints.min_charge_count:
         return False, "too_few_chargers"
+    if float(station["road_snap_distance_m"]) > constraints.max_road_snap_distance_m:
+        return False, "road_snap_distance_too_far"
     return True, ""
 
 

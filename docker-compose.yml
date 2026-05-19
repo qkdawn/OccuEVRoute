@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: occuevroute-backend
+    ports:
+      - "9000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: occuevroute-frontend
+    depends_on:
+      - backend
+    ports:
+      - "9090:80"

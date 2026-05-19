@@ -1,0 +1,2 @@
+split,features,rows,train_rows,test_rows,stations,cutoff_time,train_start,train_end,test_start,test_end,target,horizons_min,mae,r2,elapsed_seconds,total_seconds
+time_unique_80_20,20,355531,284719,70812,1423,2023-01-23T19:25:00,2022-09-01T01:55:00,2023-01-23T19:20:00,2023-01-23T19:25:00,2023-02-28T23:40:00,target_occupancy_rate,"15,30,45,60",0.02085717295642884,0.9556275447490735,1.5172822999993514,214.85276090000116
