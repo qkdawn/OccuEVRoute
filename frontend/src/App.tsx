@@ -250,7 +250,6 @@ export function App() {
               <div className="metric-grid">
                 <Metric label="Algorithm" value={form.algorithm.toUpperCase()} />
                 <Metric label="Expanded" value={`${selectedRecommendation.expanded_nodes}`} />
-                <Metric label="Trace Points" value={`${selectedRecommendation.expanded_trace_coordinates.length}`} />
                 <Metric label="Runtime" value={`${selectedRecommendation.runtime_seconds.toFixed(3)} s`} />
               </div>
               <div className="playback-controls">

@@ -13,6 +13,7 @@ from landmark_heuristic import LandmarkHeuristic
 
 DEFAULT_HEURISTIC_SPEED_KPH = 40.0
 
+
 @dataclass
 class SearchResult:
     algorithm: str
@@ -104,6 +105,16 @@ def _path_metrics(graph, path: list[str]) -> tuple[float, float]:
     return total_length_m / 1000, total_time_s / 60
 
 
+def _reconstruct_path(parent: dict[str, str | None], goal: str) -> list[str]:
+    path = []
+    node: str | None = goal
+    while node is not None:
+        path.append(node)
+        node = parent[node]
+    path.reverse()
+    return path
+
+
 def _not_found(algorithm: str, start_time: float, expanded_nodes: int, expanded_trace: list[str]) -> SearchResult:
     return SearchResult(
         algorithm=algorithm,
@@ -140,45 +151,51 @@ def _success(
 
 def bfs_search(graph, start: str, goal: str) -> SearchResult:
     started = time.perf_counter()
-    queue = deque([(start, [start])])
+    queue = deque([start])
+    parent: dict[str, str | None] = {start: None}
     visited = {start}
     expanded = 0
     expanded_trace = []
 
     while queue:
-        node, path = queue.popleft()
+        node = queue.popleft()
         expanded += 1
         expanded_trace.append(node)
         if node == goal:
+            path = _reconstruct_path(parent, goal)
             return _success("bfs", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
             if neighbor not in visited:
                 visited.add(neighbor)
-                queue.append((neighbor, path + [neighbor]))
+                parent[neighbor] = node
+                queue.append(neighbor)
     return _not_found("bfs", started, expanded, expanded_trace)
 
 
 def ucs_search(graph, start: str, goal: str) -> SearchResult:
     started = time.perf_counter()
-    heap = [(0.0, start, [start])]
+    heap = [(0.0, start)]
     best_cost = {start: 0.0}
+    parent: dict[str, str | None] = {start: None}
     expanded = 0
     expanded_trace = []
 
     while heap:
-        cost, node, path = heapq.heappop(heap)
+        cost, node = heapq.heappop(heap)
         if cost > best_cost.get(node, float("inf")):
             continue
         expanded += 1
         expanded_trace.append(node)
         if node == goal:
+            path = _reconstruct_path(parent, goal)
             return _success("ucs", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
             _, travel_time_s = _edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost
-                heapq.heappush(heap, (new_cost, neighbor, path + [neighbor]))
+                parent[neighbor] = node
+                heapq.heappush(heap, (new_cost, neighbor))
     return _not_found("ucs", started, expanded, expanded_trace)
 
 
@@ -189,26 +206,29 @@ def astar_search(
     landmark_heuristic: LandmarkHeuristic | None = None,
 ) -> SearchResult:
     started = time.perf_counter()
-    heap = [(_heuristic_minutes(graph, start, goal, landmark_heuristic), 0.0, start, [start])]
+    heap = [(_heuristic_minutes(graph, start, goal, landmark_heuristic), 0.0, start)]
     best_cost = {start: 0.0}
+    parent: dict[str, str | None] = {start: None}
     expanded = 0
     expanded_trace = []
 
     while heap:
-        _, cost, node, path = heapq.heappop(heap)
+        _, cost, node = heapq.heappop(heap)
         if cost > best_cost.get(node, float("inf")):
             continue
         expanded += 1
         expanded_trace.append(node)
         if node == goal:
+            path = _reconstruct_path(parent, goal)
             return _success("astar", graph, path, started, expanded, expanded_trace)
         for neighbor in graph.successors(node):
             _, travel_time_s = _edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost
+                parent[neighbor] = node
                 priority = new_cost + _heuristic_minutes(graph, neighbor, goal, landmark_heuristic)
-                heapq.heappush(heap, (priority, new_cost, neighbor, path + [neighbor]))
+                heapq.heappush(heap, (priority, new_cost, neighbor))
     return _not_found("astar", started, expanded, expanded_trace)
 
 
