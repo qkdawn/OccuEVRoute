@@ -191,7 +191,6 @@ export function RouteMap({
     const visibleTraceCount = Math.max(0, Math.ceil(tracePoints.length * searchPlaybackProgress));
     const visibleTrace = tracePoints.slice(0, visibleTraceCount).map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap)));
     if (visibleTrace.length && searchTraceLayerRef.current) {
-      L.polyline(visibleTrace, { color: "#7c3aed", weight: 3, opacity: 0.38 }).addTo(searchTraceLayerRef.current);
       visibleTrace.forEach((point, index) => {
         const opacity = 0.18 + (index / Math.max(visibleTrace.length - 1, 1)) * 0.42;
         L.circleMarker(point, {
