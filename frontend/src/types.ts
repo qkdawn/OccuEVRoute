@@ -1,6 +1,14 @@
 export type Algorithm = "astar" | "ucs" | "bfs";
 export type Basemap = "gaode" | "carto" | "osm";
 
+export interface LayerVisibility {
+  boundary: boolean;
+  stations: boolean;
+  route: boolean;
+  searchTrace: boolean;
+  snapLines: boolean;
+}
+
 export interface Point {
   lat: number;
   lng: number;

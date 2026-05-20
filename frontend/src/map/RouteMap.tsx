@@ -3,7 +3,7 @@ import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import type { Basemap, BoundaryGeoJson, BoundaryGeometry, Point, RecommendationItem } from "../types";
+import type { Basemap, BoundaryGeoJson, BoundaryGeometry, LayerVisibility, Point, RecommendationItem } from "../types";
 import { fromMapPoint, toMapPoint } from "./coordinates";
 
 L.Icon.Default.mergeOptions({
@@ -37,6 +37,7 @@ interface RouteMapProps {
   recommendations: RecommendationItem[];
   selectedStationId: number | null;
   searchPlaybackProgress: number;
+  layerVisibility: LayerVisibility;
   onPointChange: (point: Point) => void;
   onInvalidPoint: () => void;
   onStationSelect: (stationId: number) => void;
@@ -49,6 +50,7 @@ export function RouteMap({
   recommendations,
   selectedStationId,
   searchPlaybackProgress,
+  layerVisibility,
   onPointChange,
   onInvalidPoint,
   onStationSelect,
@@ -132,25 +134,30 @@ export function RouteMap({
     if (boundaryMaskRef.current) boundaryMaskRef.current.remove();
     if (boundaryLayerRef.current) boundaryLayerRef.current.remove();
     const mapBoundary = boundaryToMapGeoJson(boundary, basemap);
-    boundaryMaskRef.current = L.polygon(boundaryMaskRings(mapBoundary), {
-      color: "transparent",
-      fillColor: "#0f172a",
-      fillOpacity: 0.18,
-      fillRule: "evenodd",
-      interactive: false,
-      stroke: false,
-    }).addTo(map);
-    boundaryLayerRef.current = L.geoJSON(mapBoundary, {
-      interactive: false,
-      style: {
-        color: "#0f766e",
-        weight: 2,
-        opacity: 0.9,
-        fillOpacity: 0,
-      },
-    }).addTo(map);
-    boundaryMaskRef.current.bringToBack();
-    boundaryLayerRef.current.bringToBack();
+    if (layerVisibility.boundary) {
+      boundaryMaskRef.current = L.polygon(boundaryMaskRings(mapBoundary), {
+        color: "transparent",
+        fillColor: "#0f172a",
+        fillOpacity: 0.18,
+        fillRule: "evenodd",
+        interactive: false,
+        stroke: false,
+      }).addTo(map);
+      boundaryLayerRef.current = L.geoJSON(mapBoundary, {
+        interactive: false,
+        style: {
+          color: "#0f766e",
+          weight: 2,
+          opacity: 0.9,
+          fillOpacity: 0,
+        },
+      }).addTo(map);
+      boundaryMaskRef.current.bringToBack();
+      boundaryLayerRef.current.bringToBack();
+    } else {
+      boundaryMaskRef.current = null;
+      boundaryLayerRef.current = null;
+    }
     const bounds = boundaryBounds(mapBoundary);
     if (bounds.isValid()) {
       const paddedBounds = bounds.pad(0.15);
@@ -161,7 +168,7 @@ export function RouteMap({
         hasFitBoundaryRef.current = true;
       }
     }
-  }, [basemap, boundary]);
+  }, [basemap, boundary, layerVisibility.boundary]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -173,17 +180,19 @@ export function RouteMap({
     removePolyline(startSnapLayerRef);
     removePolyline(stationSnapLayerRef);
 
-    recommendations.forEach((item, index) => {
-      if (item.station_id === null || item.station_latitude === null || item.station_longitude === null) return;
-      const isSelected = item.station_id === selectedRecommendation?.station_id;
-      const marker = L.marker(toLeaflet(toMapPoint({ lat: item.station_latitude, lng: item.station_longitude }, basemap)), {
-        icon: stationIcon(isSelected),
-        title: item.station_display_name ?? `station_id=${item.station_id}`,
+    if (layerVisibility.stations) {
+      recommendations.forEach((item, index) => {
+        if (item.station_id === null || item.station_latitude === null || item.station_longitude === null) return;
+        const isSelected = item.station_id === selectedRecommendation?.station_id;
+        const marker = L.marker(toLeaflet(toMapPoint({ lat: item.station_latitude, lng: item.station_longitude }, basemap)), {
+          icon: stationIcon(isSelected),
+          title: item.station_display_name ?? `station_id=${item.station_id}`,
+        });
+        marker.bindTooltip(stationTooltip(item, index + 1));
+        marker.on("click", () => onStationSelect(item.station_id as number));
+        marker.addTo(stationLayerRef.current as L.LayerGroup);
       });
-      marker.bindTooltip(stationTooltip(item, index + 1));
-      marker.on("click", () => onStationSelect(item.station_id as number));
-      marker.addTo(stationLayerRef.current as L.LayerGroup);
-    });
+    }
 
     if (!selectedPoint || !selectedRecommendation?.route_coordinates.length) return;
 
@@ -191,7 +200,7 @@ export function RouteMap({
     const visibleTraceCount = Math.max(0, Math.ceil(tracePoints.length * searchPlaybackProgress));
     const visibleTracePoints = tracePoints.slice(0, visibleTraceCount).map(([lat, lng]) => toMapPoint({ lat, lng }, basemap));
     const visibleTrace = visibleTracePoints.map(toLeaflet);
-    if (visibleTrace.length && searchTraceLayerRef.current) {
+    if (layerVisibility.searchTrace && visibleTrace.length && searchTraceLayerRef.current) {
       const hull = convexHull(visibleTracePoints);
       if (hull.length >= 3) {
         L.polygon(hull.map(toLeaflet), {
@@ -216,12 +225,18 @@ export function RouteMap({
       });
     }
 
-    routeLayerRef.current = L.polyline(
-      selectedRecommendation.route_coordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))),
-      { color: "#2563eb", weight: 5, opacity: 0.86 },
-    ).addTo(map);
+    if (layerVisibility.route) {
+      routeLayerRef.current = L.polyline(
+        selectedRecommendation.route_coordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))),
+        { color: "#2563eb", weight: 5, opacity: 0.86 },
+      ).addTo(map);
+    }
 
-    if (selectedRecommendation.start_node_latitude !== null && selectedRecommendation.start_node_longitude !== null) {
+    if (
+      layerVisibility.snapLines &&
+      selectedRecommendation.start_node_latitude !== null &&
+      selectedRecommendation.start_node_longitude !== null
+    ) {
       startSnapLayerRef.current = L.polyline(
         [
           toLeaflet(toMapPoint(selectedPoint, basemap)),
@@ -240,6 +255,7 @@ export function RouteMap({
     }
 
     if (
+      layerVisibility.snapLines &&
       selectedRecommendation.station_road_latitude !== null &&
       selectedRecommendation.station_road_longitude !== null &&
       selectedRecommendation.station_latitude !== null &&
@@ -269,7 +285,7 @@ export function RouteMap({
         { color: "#f97316", weight: 4, opacity: 0.92, dashArray: "8,8" },
       ).addTo(map);
     }
-  }, [basemap, onStationSelect, recommendations, searchPlaybackProgress, selectedPoint, selectedRecommendation]);
+  }, [basemap, layerVisibility, onStationSelect, recommendations, searchPlaybackProgress, selectedPoint, selectedRecommendation]);
 
   return <div className="map-canvas" ref={containerRef} />;
 }
