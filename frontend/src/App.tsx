@@ -64,7 +64,7 @@ const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
 
 const PANELS: PanelConfig[] = [
   { id: "search", title: "Search configuration", eyebrow: "Plan", placement: "left", defaultOpen: true, enabled: true },
-  { id: "vehicle", title: "Vehicle constraints", eyebrow: "Feasibility", placement: "left", defaultOpen: true, enabled: true },
+  { id: "vehicle", title: "Vehicle constraints", eyebrow: "Feasibility", placement: "left", defaultOpen: false, enabled: true },
   { id: "algorithm", title: "Algorithm configuration", eyebrow: "Advanced", placement: "left", defaultOpen: false, enabled: true },
   { id: "layers", title: "Layer display", eyebrow: "Map", placement: "left", defaultOpen: false, enabled: true },
   { id: "location", title: "Current location", eyebrow: "Input", placement: "right", defaultOpen: true, enabled: true },
@@ -112,6 +112,20 @@ export function App() {
   const selectedRecommendation = useMemo(() => {
     return recommendations.find((item) => item.station_id === selectedStationId) ?? recommendations[0] ?? null;
   }, [recommendations, selectedStationId]);
+
+  const panelSummaries = useMemo<Record<PanelId, string>>(
+    () => ({
+      search: `${form.maxCandidates} candidates within ${form.maxSearchRadiusKm} km`,
+      vehicle: `${form.currentSocPercent}% SOC, ${form.batteryCapacityKwh} kWh battery`,
+      algorithm: `${form.algorithm.toUpperCase()}, snap ${form.maxStartSnapDistanceM}/${form.maxRoadSnapDistanceM} m`,
+      layers: layerSummary(layerVisibility),
+      location: selectedPoint ? `${selectedPoint.lat.toFixed(4)}, ${selectedPoint.lng.toFixed(4)}` : "Waiting for map click",
+      recommendations: recommendations.length ? `${recommendations.length} ranked stations` : "No run yet",
+      route: selectedRecommendation ? `${formatMetric(selectedRecommendation.drive_time_min)} min, ${formatMetric(selectedRecommendation.distance_km)} km` : "No route selected",
+      playback: selectedRecommendation ? `${selectedRecommendation.expanded_nodes} expanded nodes` : "No trace yet",
+    }),
+    [form, layerVisibility, recommendations.length, selectedPoint, selectedRecommendation],
+  );
 
   function updateForm<T extends keyof FormState>(key: T, value: FormState[T]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -217,6 +231,7 @@ export function App() {
         <PanelRenderer
           placement="left"
           openPanels={openPanels}
+          panelSummaries={panelSummaries}
           onTogglePanel={togglePanel}
           renderPanel={(id) => {
             if (id === "search") {
@@ -246,8 +261,8 @@ export function App() {
 
       <section className="map-panel" aria-label="Route planning map">
         <div className="map-status-strip">
-          <span>{selectedPoint ? "Location selected" : "Click inside Shenzhen to set a start location"}</span>
-          <strong>{recommendations.length ? `${recommendations.length} recommendations` : "No recommendation run yet"}</strong>
+          <span>{selectedPoint ? "Start location selected" : "Choose a Shenzhen start location"}</span>
+          <strong>{recommendations.length ? `${recommendations.length} candidates ranked` : "No run yet"}</strong>
         </div>
         <RouteMap
           basemap={form.basemap}
@@ -268,6 +283,7 @@ export function App() {
         <PanelRenderer
           placement="right"
           openPanels={openPanels}
+          panelSummaries={panelSummaries}
           onTogglePanel={togglePanel}
           renderPanel={(id) => {
             if (id === "location") {
@@ -318,7 +334,6 @@ function WorkspaceHeader({ onReset }: { onReset: () => void }) {
       <div>
         <p className="eyebrow">OccuEVRoute</p>
         <h1>EV charging route planner</h1>
-        <span>Course-demo workspace for route recommendation and search diagnostics.</span>
       </div>
       <button type="button" className="secondary-action" onClick={onReset}>
         Reset
@@ -330,11 +345,13 @@ function WorkspaceHeader({ onReset }: { onReset: () => void }) {
 function PanelRenderer({
   placement,
   openPanels,
+  panelSummaries,
   onTogglePanel,
   renderPanel,
 }: {
   placement: PanelPlacement;
   openPanels: Record<PanelId, boolean>;
+  panelSummaries: Record<PanelId, string>;
   onTogglePanel: (id: PanelId) => void;
   renderPanel: (id: PanelId) => ReactNode;
 }) {
@@ -345,6 +362,7 @@ function PanelRenderer({
           key={panel.id}
           title={panel.title}
           eyebrow={panel.eyebrow}
+          summary={panelSummaries[panel.id]}
           isOpen={openPanels[panel.id]}
           onToggle={() => onTogglePanel(panel.id)}
         >
@@ -358,12 +376,14 @@ function PanelRenderer({
 function CollapsiblePanel({
   title,
   eyebrow,
+  summary,
   isOpen,
   onToggle,
   children,
 }: {
   title: string;
   eyebrow: string;
+  summary: string;
   isOpen: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -374,6 +394,7 @@ function CollapsiblePanel({
         <span>
           <small>{eyebrow}</small>
           <strong>{title}</strong>
+          {!isOpen && <em>{summary}</em>}
         </span>
         <span aria-hidden="true">{isOpen ? "-" : "+"}</span>
       </button>
@@ -468,11 +489,6 @@ function LocationSummaryPanel({ selectedPoint, submittedPoint }: { selectedPoint
   return (
     <div className="summary-copy">
       <strong>{selectedPoint ? `${selectedPoint.lat.toFixed(6)}, ${selectedPoint.lng.toFixed(6)}` : "No start location selected"}</strong>
-      <span>
-        {selectedPoint
-          ? "Run recommendations for this Shenzhen start location."
-          : "Click inside the Shenzhen boundary on the map to start the demo flow."}
-      </span>
       {submittedPoint && (
         <span>
           Latest recommendation run: {submittedPoint.lat.toFixed(6)}, {submittedPoint.lng.toFixed(6)}
@@ -511,10 +527,10 @@ function RecommendationListPanel({
           {recommendations.map((item, index) => (
             <tr
               key={`${item.station_id}-${index}`}
-              className={item.station_id === selectedStationId ? "selected-row" : ""}
+              className={[item.station_id === selectedStationId ? "selected-row" : "", index === 0 ? "top-row" : ""].filter(Boolean).join(" ")}
               onClick={() => item.station_id !== null && onStationSelect(item.station_id)}
             >
-              <td data-label="#">{index + 1}</td>
+              <td data-label="#">{index === 0 ? "Top" : index + 1}</td>
               <td data-label="Station">{item.station_display_name ?? item.station_id}</td>
               <td data-label="Time">{formatMetric(item.drive_time_min)}</td>
               <td data-label="Distance">{formatMetric(item.distance_km)}</td>
@@ -533,14 +549,27 @@ function SelectedRoutePanel({ selectedRecommendation }: { selectedRecommendation
   }
 
   return (
-    <div className="metric-grid">
-      <Metric label="Time" value={`${formatMetric(selectedRecommendation.drive_time_min)} min`} />
-      <Metric label="Distance" value={`${formatMetric(selectedRecommendation.distance_km)} km`} />
-      <Metric label="Arrival SOC" value={selectedRecommendation.arrival_soc === null ? "-" : `${(selectedRecommendation.arrival_soc * 100).toFixed(1)}%`} />
-      <Metric label="Start snap" value={`${formatMetric(selectedRecommendation.start_snap_distance_m)} m`} />
-      <Metric label="Station snap" value={`${formatMetric(selectedRecommendation.road_snap_distance_m)} m`} />
-      <Metric label="Nearby POI" value={formatPoiSummary(selectedRecommendation)} />
-    </div>
+    <>
+      <div className="route-hero">
+        <div>
+          <span>Drive time</span>
+          <strong>{formatMetric(selectedRecommendation.drive_time_min)} min</strong>
+        </div>
+        <div>
+          <span>Distance</span>
+          <strong>{formatMetric(selectedRecommendation.distance_km)} km</strong>
+        </div>
+        <div>
+          <span>Arrival SOC</span>
+          <strong>{selectedRecommendation.arrival_soc === null ? "-" : `${(selectedRecommendation.arrival_soc * 100).toFixed(1)}%`}</strong>
+        </div>
+      </div>
+      <div className="metric-grid secondary-metrics">
+        <Metric label="Start snap" value={`${formatMetric(selectedRecommendation.start_snap_distance_m)} m`} />
+        <Metric label="Station snap" value={`${formatMetric(selectedRecommendation.road_snap_distance_m)} m`} />
+        <Metric label="Nearby POI" value={formatPoiSummary(selectedRecommendation)} />
+      </div>
+    </>
   );
 }
 
@@ -567,6 +596,7 @@ function SearchPlaybackPanel({
 
   return (
     <>
+      <p className="panel-note">Replay the explored road area for the selected algorithm without changing the recommendation result.</p>
       <div className="metric-grid">
         <Metric label="Algorithm" value={algorithm.toUpperCase()} />
         <Metric label="Expanded" value={`${selectedRecommendation.expanded_nodes}`} />
@@ -671,4 +701,9 @@ function formatRuntime(seconds: number) {
 function formatPoiSummary(item: RecommendationItem) {
   if (item.poi_total_count === null) return "-";
   return `${item.poi_total_count} / ${item.poi_lifestyle_services_count ?? 0} / ${item.poi_food_beverage_count ?? 0} / ${item.poi_business_residential_count ?? 0}`;
+}
+
+function layerSummary(layerVisibility: LayerVisibility) {
+  const activeCount = Object.values(layerVisibility).filter(Boolean).length;
+  return `${activeCount} of ${Object.keys(layerVisibility).length} layers visible`;
 }
