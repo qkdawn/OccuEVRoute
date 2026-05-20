@@ -4,3 +4,4 @@ pandas==2.2.3
 shapely==2.1.2
 fastapi==0.115.6
 uvicorn==0.34.0
+pytest==9.0.2

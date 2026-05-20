@@ -11,7 +11,7 @@ from candidate_selector import select_nearby_stations
 from constraints import UserConstraints, post_csp_check, pre_csp_check
 from graph_loader import build_graph_with_start_access, load_road_graph, load_station_access
 from landmark_heuristic import LandmarkHeuristic
-from search_algorithms import run_search
+from search_algorithms import SearchResult, run_search
 
 
 def recommend_charging_stations(
@@ -63,7 +63,6 @@ def recommend_charging_stations(
             constraints,
         )
         route_coordinates = _path_to_route_coordinates(search_graph, search.path)
-        expanded_trace_coordinates = _nodes_to_coordinates(search_graph, search.expanded_trace)
         results.append(
             {
                 "station_id": int(station["station_id"]),
@@ -71,7 +70,7 @@ def recommend_charging_stations(
                 "algorithm": search.algorithm,
                 "path": search.path,
                 "route_coordinates": route_coordinates,
-                "expanded_trace_coordinates": expanded_trace_coordinates,
+                "search_trace": _search_trace(search_graph, search),
                 "start_node": str(start_node),
                 "start_node_latitude": start_node_latitude,
                 "start_node_longitude": start_node_longitude,
@@ -161,7 +160,7 @@ def _rejected_result(station: pd.Series, algorithm: str, reason: str) -> dict:
         "algorithm": algorithm,
         "path": [],
         "route_coordinates": [],
-        "expanded_trace_coordinates": [],
+        "search_trace": _empty_search_trace(),
         "start_node": None,
         "start_node_latitude": None,
         "start_node_longitude": None,
@@ -182,6 +181,34 @@ def _rejected_result(station: pd.Series, algorithm: str, reason: str) -> dict:
         "passed_constraints": False,
         "reject_reason": reason,
     }
+
+
+def _empty_search_trace() -> dict:
+    return {
+        "kind": "single",
+        "layers": [{"role": "single", "coordinates": []}],
+        "meeting_node_coordinate": None,
+    }
+
+
+def _search_trace(graph, search: SearchResult) -> dict:
+    return {
+        "kind": search.search_trace.kind,
+        "layers": [
+            {"role": layer.role, "coordinates": _nodes_to_coordinates(graph, layer.nodes)}
+            for layer in search.search_trace.layers
+        ],
+        "meeting_node_coordinate": _optional_node_coordinates(graph, search.search_trace.meeting_node),
+    }
+
+
+def _optional_node_coordinates(graph, node: str | None) -> tuple[float, float] | None:
+    if node is None:
+        return None
+    try:
+        return _node_coordinates(graph, node)
+    except KeyError:
+        return None
 
 
 def parse_args() -> argparse.Namespace:

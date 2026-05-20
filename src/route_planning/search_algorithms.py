@@ -7,11 +7,28 @@ import math
 import time
 from collections import deque
 from dataclasses import dataclass
+from typing import Literal
 
 from landmark_heuristic import LandmarkHeuristic
 
 
 DEFAULT_HEURISTIC_SPEED_KPH = 40.0
+
+SearchTraceKind = Literal["single", "bidirectional"]
+SearchTraceRole = Literal["single", "forward", "backward"]
+
+
+@dataclass(frozen=True)
+class SearchTraceLayer:
+    role: SearchTraceRole
+    nodes: list[str]
+
+
+@dataclass(frozen=True)
+class SearchTrace:
+    kind: SearchTraceKind
+    layers: list[SearchTraceLayer]
+    meeting_node: str | None = None
 
 
 @dataclass
@@ -23,7 +40,7 @@ class SearchResult:
     drive_time_min: float | None
     expanded_nodes: int
     runtime_seconds: float
-    expanded_trace: list[str]
+    search_trace: SearchTrace
 
 
 def _node_xy(graph, node: str) -> tuple[float, float]:
@@ -115,7 +132,26 @@ def _reconstruct_path(parent: dict[str, str | None], goal: str) -> list[str]:
     return path
 
 
-def _not_found(algorithm: str, start_time: float, expanded_nodes: int, expanded_trace: list[str]) -> SearchResult:
+def _reconstruct_bidirectional_path(
+    forward_parent: dict[str, str | None],
+    backward_parent: dict[str, str | None],
+    meeting_node: str,
+) -> list[str]:
+    forward_path = _reconstruct_path(forward_parent, meeting_node)
+    backward_path = []
+    node = backward_parent[meeting_node]
+    while node is not None:
+        backward_path.append(node)
+        node = backward_parent[node]
+    return forward_path + backward_path
+
+
+def _not_found(
+    algorithm: str,
+    start_time: float,
+    expanded_nodes: int,
+    search_trace: SearchTrace,
+) -> SearchResult:
     return SearchResult(
         algorithm=algorithm,
         path=[],
@@ -124,7 +160,7 @@ def _not_found(algorithm: str, start_time: float, expanded_nodes: int, expanded_
         drive_time_min=None,
         expanded_nodes=expanded_nodes,
         runtime_seconds=time.perf_counter() - start_time,
-        expanded_trace=expanded_trace,
+        search_trace=search_trace,
     )
 
 
@@ -134,7 +170,7 @@ def _success(
     path: list[str],
     start_time: float,
     expanded_nodes: int,
-    expanded_trace: list[str],
+    search_trace: SearchTrace,
 ) -> SearchResult:
     distance_km, drive_time_min = _path_metrics(graph, path)
     return SearchResult(
@@ -145,31 +181,106 @@ def _success(
         drive_time_min=drive_time_min,
         expanded_nodes=expanded_nodes,
         runtime_seconds=time.perf_counter() - start_time,
-        expanded_trace=expanded_trace,
+        search_trace=search_trace,
+    )
+
+
+def _single_trace(nodes: list[str]) -> SearchTrace:
+    return SearchTrace(kind="single", layers=[SearchTraceLayer(role="single", nodes=nodes)])
+
+
+def _bidirectional_trace(forward_nodes: list[str], backward_nodes: list[str], meeting_node: str | None = None) -> SearchTrace:
+    return SearchTrace(
+        kind="bidirectional",
+        layers=[
+            SearchTraceLayer(role="forward", nodes=forward_nodes),
+            SearchTraceLayer(role="backward", nodes=backward_nodes),
+        ],
+        meeting_node=meeting_node,
     )
 
 
 def bfs_search(graph, start: str, goal: str) -> SearchResult:
-    started = time.perf_counter()
-    queue = deque([start])
-    parent: dict[str, str | None] = {start: None}
-    visited = {start}
-    expanded = 0
-    expanded_trace = []
+    """Run bidirectional BFS over directed road edges.
 
-    while queue:
-        node = queue.popleft()
-        expanded += 1
-        expanded_trace.append(node)
-        if node == goal:
-            path = _reconstruct_path(parent, goal)
-            return _success("bfs", graph, path, started, expanded, expanded_trace)
-        for neighbor in graph.successors(node):
-            if neighbor not in visited:
-                visited.add(neighbor)
-                parent[neighbor] = node
-                queue.append(neighbor)
-    return _not_found("bfs", started, expanded, expanded_trace)
+    The public algorithm key remains "bfs" for API compatibility, but the
+    result carries separate forward/backward traces so the UI can show the two
+    frontiers meeting.
+    """
+    started = time.perf_counter()
+    if start == goal:
+        return _success(
+            "bfs",
+            graph,
+            [start],
+            started,
+            1,
+            _bidirectional_trace([start], [goal], start),
+        )
+
+    forward_queue = deque([start])
+    backward_queue = deque([goal])
+    forward_parent: dict[str, str | None] = {start: None}
+    backward_parent: dict[str, str | None] = {goal: None}
+    forward_visited = {start}
+    backward_visited = {goal}
+    expanded = 0
+    forward_trace_nodes = []
+    backward_trace_nodes = []
+
+    def expand_forward_layer() -> str | None:
+        nonlocal expanded
+        for _ in range(len(forward_queue)):
+            node = forward_queue.popleft()
+            expanded += 1
+            forward_trace_nodes.append(node)
+            for neighbor in graph.successors(node):
+                if neighbor in forward_visited:
+                    continue
+                forward_visited.add(neighbor)
+                forward_parent[neighbor] = node
+                if neighbor in backward_visited:
+                    return neighbor
+                forward_queue.append(neighbor)
+        return None
+
+    def expand_backward_layer() -> str | None:
+        nonlocal expanded
+        for _ in range(len(backward_queue)):
+            node = backward_queue.popleft()
+            expanded += 1
+            backward_trace_nodes.append(node)
+            for predecessor in graph.predecessors(node):
+                if predecessor in backward_visited:
+                    continue
+                backward_visited.add(predecessor)
+                backward_parent[predecessor] = node
+                if predecessor in forward_visited:
+                    return predecessor
+                backward_queue.append(predecessor)
+        return None
+
+    while forward_queue and backward_queue:
+        meeting_node = expand_forward_layer()
+        if meeting_node is None:
+            meeting_node = expand_backward_layer()
+        if meeting_node is not None:
+            path = _reconstruct_bidirectional_path(forward_parent, backward_parent, meeting_node)
+            return _success(
+                "bfs",
+                graph,
+                path,
+                started,
+                expanded,
+                _bidirectional_trace(forward_trace_nodes, backward_trace_nodes, meeting_node),
+            )
+
+    return _not_found(
+        "bfs",
+        started,
+        expanded,
+        _bidirectional_trace(forward_trace_nodes, backward_trace_nodes),
+    )
 
 
 def ucs_search(graph, start: str, goal: str) -> SearchResult:
@@ -188,7 +299,7 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
         expanded_trace.append(node)
         if node == goal:
             path = _reconstruct_path(parent, goal)
-            return _success("ucs", graph, path, started, expanded, expanded_trace)
+            return _success("ucs", graph, path, started, expanded, _single_trace(expanded_trace))
         for neighbor in graph.successors(node):
             _, travel_time_s = _edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
@@ -196,7 +307,7 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
                 best_cost[neighbor] = new_cost
                 parent[neighbor] = node
                 heapq.heappush(heap, (new_cost, neighbor))
-    return _not_found("ucs", started, expanded, expanded_trace)
+    return _not_found("ucs", started, expanded, _single_trace(expanded_trace))
 
 
 def astar_search(
@@ -220,7 +331,7 @@ def astar_search(
         expanded_trace.append(node)
         if node == goal:
             path = _reconstruct_path(parent, goal)
-            return _success("astar", graph, path, started, expanded, expanded_trace)
+            return _success("astar", graph, path, started, expanded, _single_trace(expanded_trace))
         for neighbor in graph.successors(node):
             _, travel_time_s = _edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
@@ -229,7 +340,7 @@ def astar_search(
                 parent[neighbor] = node
                 priority = new_cost + _heuristic_minutes(graph, neighbor, goal, landmark_heuristic)
                 heapq.heappush(heap, (priority, new_cost, neighbor))
-    return _not_found("astar", started, expanded, expanded_trace)
+    return _not_found("astar", started, expanded, _single_trace(expanded_trace))
 
 
 def run_search(

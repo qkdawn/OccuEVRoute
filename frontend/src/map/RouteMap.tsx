@@ -3,7 +3,7 @@ import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import type { Basemap, BoundaryGeoJson, BoundaryGeometry, LayerVisibility, Point, RecommendationItem } from "../types";
+import type { Basemap, BoundaryGeoJson, BoundaryGeometry, LayerVisibility, Point, RecommendationItem, SearchTraceRole } from "../types";
 import { fromMapPoint, toMapPoint } from "./coordinates";
 
 L.Icon.Default.mergeOptions({
@@ -29,6 +29,18 @@ const BASEMAPS: Record<Basemap, { url: string; attribution: string }> = {
     attribution: "&copy; OpenStreetMap contributors",
   },
 };
+
+const TRACE_ROLE_STYLES: Record<SearchTraceRole, TraceStyle> = {
+  single: { stroke: "#6d28d9", fill: "#8b5cf6", hullFill: "#8b5cf6" },
+  forward: { stroke: "#0f766e", fill: "#14b8a6", hullFill: "#99f6e4" },
+  backward: { stroke: "#be123c", fill: "#fb7185", hullFill: "#ffe4e6" },
+};
+
+interface TraceStyle {
+  stroke: string;
+  fill: string;
+  hullFill: string;
+}
 
 interface RouteMapProps {
   basemap: Basemap;
@@ -196,33 +208,42 @@ export function RouteMap({
 
     if (!selectedPoint || !selectedRecommendation?.route_coordinates.length) return;
 
-    const tracePoints = selectedRecommendation.expanded_trace_coordinates;
-    const visibleTraceCount = Math.max(0, Math.ceil(tracePoints.length * searchPlaybackProgress));
-    const visibleTracePoints = tracePoints.slice(0, visibleTraceCount).map(([lat, lng]) => toMapPoint({ lat, lng }, basemap));
-    const visibleTrace = visibleTracePoints.map(toLeaflet);
-    if (layerVisibility.searchTrace && visibleTrace.length && searchTraceLayerRef.current) {
-      const hull = convexHull(visibleTracePoints);
-      if (hull.length >= 3) {
-        L.polygon(hull.map(toLeaflet), {
-          color: "#7c3aed",
-          weight: 2,
-          opacity: 0.52,
-          fillColor: "#8b5cf6",
-          fillOpacity: 0.16,
-          interactive: false,
-        }).addTo(searchTraceLayerRef.current);
+    if (layerVisibility.searchTrace && searchTraceLayerRef.current) {
+      if (selectedRecommendation.search_trace.kind === "bidirectional") {
+        renderTrace(
+          searchTraceLayerRef.current,
+          traceLayerCoordinates(selectedRecommendation, "forward"),
+          searchPlaybackProgress,
+          basemap,
+          TRACE_ROLE_STYLES.forward,
+        );
+        renderTrace(
+          searchTraceLayerRef.current,
+          traceLayerCoordinates(selectedRecommendation, "backward"),
+          searchPlaybackProgress,
+          basemap,
+          TRACE_ROLE_STYLES.backward,
+        );
+        if (searchPlaybackProgress >= 0.98 && selectedRecommendation.search_trace.meeting_node_coordinate) {
+          const [lat, lng] = selectedRecommendation.search_trace.meeting_node_coordinate;
+          L.circleMarker(toLeaflet(toMapPoint({ lat, lng }, basemap)), {
+            radius: 7,
+            color: "#111827",
+            weight: 2,
+            fillColor: "#ffffff",
+            fillOpacity: 0.92,
+            interactive: false,
+          }).addTo(searchTraceLayerRef.current);
+        }
+      } else {
+        renderTrace(
+          searchTraceLayerRef.current,
+          traceLayerCoordinates(selectedRecommendation, "single"),
+          searchPlaybackProgress,
+          basemap,
+          TRACE_ROLE_STYLES.single,
+        );
       }
-      visibleTrace.forEach((point, index) => {
-        const opacity = 0.18 + (index / Math.max(visibleTrace.length - 1, 1)) * 0.42;
-        L.circleMarker(point, {
-          radius: 2.8,
-          color: "#6d28d9",
-          weight: 0,
-          fillColor: "#8b5cf6",
-          fillOpacity: opacity,
-          interactive: false,
-        }).addTo(searchTraceLayerRef.current as L.LayerGroup);
-      });
     }
 
     if (layerVisibility.route) {
@@ -299,6 +320,47 @@ function removePolyline(ref: React.MutableRefObject<L.Polyline | null>) {
     ref.current.remove();
     ref.current = null;
   }
+}
+
+function traceLayerCoordinates(item: RecommendationItem, role: SearchTraceRole) {
+  return item.search_trace.layers.find((layer) => layer.role === role)?.coordinates ?? [];
+}
+
+function renderTrace(
+  layer: L.LayerGroup,
+  traceCoordinates: [number, number][],
+  progress: number,
+  basemap: Basemap,
+  colors: TraceStyle,
+) {
+  const visibleTraceCount = Math.max(0, Math.ceil(traceCoordinates.length * progress));
+  const visibleTracePoints = traceCoordinates.slice(0, visibleTraceCount).map(([lat, lng]) => toMapPoint({ lat, lng }, basemap));
+  const visibleTrace = visibleTracePoints.map(toLeaflet);
+  if (!visibleTrace.length) return;
+
+  const hull = convexHull(visibleTracePoints);
+  if (hull.length >= 3) {
+    L.polygon(hull.map(toLeaflet), {
+      color: colors.stroke,
+      weight: 2,
+      opacity: 0.48,
+      fillColor: colors.hullFill,
+      fillOpacity: 0.14,
+      interactive: false,
+    }).addTo(layer);
+  }
+
+  visibleTrace.forEach((point, index) => {
+    const opacity = 0.18 + (index / Math.max(visibleTrace.length - 1, 1)) * 0.42;
+    L.circleMarker(point, {
+      radius: 2.8,
+      color: colors.stroke,
+      weight: 0,
+      fillColor: colors.fill,
+      fillOpacity: opacity,
+      interactive: false,
+    }).addTo(layer);
+  });
 }
 
 function convexHull(points: Point[]): Point[] {

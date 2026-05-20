@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 Algorithm = Literal["astar", "ucs", "bfs"]
+SearchTraceKind = Literal["single", "bidirectional"]
+SearchTraceRole = Literal["single", "forward", "backward"]
 
 
 class RecommendationRequest(BaseModel):
@@ -27,6 +29,33 @@ class RecommendationRequest(BaseModel):
     top_k: int = Field(default=20, ge=1, le=100)
 
 
+class SearchTraceLayer(BaseModel):
+    role: SearchTraceRole
+    coordinates: list[tuple[float, float]]
+
+
+class SearchTrace(BaseModel):
+    kind: SearchTraceKind
+    layers: list[SearchTraceLayer]
+    meeting_node_coordinate: tuple[float, float] | None = None
+
+    @model_validator(mode="after")
+    def normalize_layers(self) -> "SearchTrace":
+        if self.kind == "single":
+            single_layers = [layer for layer in self.layers if layer.role == "single"]
+            self.layers = single_layers or [SearchTraceLayer(role="single", coordinates=[])]
+            self.meeting_node_coordinate = None
+            return self
+
+        layers_by_role = {layer.role: layer for layer in self.layers if layer.role in {"forward", "backward"}}
+        missing_roles = {"forward", "backward"} - set(layers_by_role)
+        if missing_roles:
+            missing = ", ".join(sorted(missing_roles))
+            raise ValueError(f"bidirectional search trace is missing {missing} layer")
+        self.layers = [layers_by_role["forward"], layers_by_role["backward"]]
+        return self
+
+
 class RecommendationItem(BaseModel):
     station_id: int | None
     station_display_name: str | None
@@ -38,7 +67,7 @@ class RecommendationItem(BaseModel):
     start_node_longitude: float | None
     start_snap_distance_m: float | None
     route_coordinates: list[tuple[float, float]]
-    expanded_trace_coordinates: list[tuple[float, float]]
+    search_trace: SearchTrace
     distance_km: float | None
     drive_time_min: float | None
     road_snap_distance_m: float | None

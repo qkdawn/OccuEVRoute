@@ -14,6 +14,20 @@ export interface Point {
   lng: number;
 }
 
+export type SearchTraceKind = "single" | "bidirectional";
+export type SearchTraceRole = "single" | "forward" | "backward";
+
+export interface SearchTraceLayer {
+  role: SearchTraceRole;
+  coordinates: [number, number][];
+}
+
+export interface SearchTrace {
+  kind: SearchTraceKind;
+  layers: SearchTraceLayer[];
+  meeting_node_coordinate: [number, number] | null;
+}
+
 export interface RecommendationRequest {
   lat: number;
   lng: number;
@@ -42,7 +56,7 @@ export interface RecommendationItem {
   start_node_longitude: number | null;
   start_snap_distance_m: number | null;
   route_coordinates: [number, number][];
-  expanded_trace_coordinates: [number, number][];
+  search_trace: SearchTrace;
   distance_km: number | null;
   drive_time_min: number | null;
   road_snap_distance_m: number | null;

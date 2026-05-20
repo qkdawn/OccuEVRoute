@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from pydantic import ValidationError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ROUTE_PLANNING_DIR = PROJECT_ROOT / "src" / "route_planning"
@@ -20,7 +21,7 @@ from graph_loader import load_road_graph, load_station_access, nearest_road_edge
 from landmark_heuristic import LandmarkHeuristic
 from recommender import recommend_charging_stations
 
-from backend.schemas import RecommendationItem, RecommendationRequest, RecommendationResponse
+from backend.schemas import RecommendationItem, RecommendationRequest, RecommendationResponse, SearchTrace
 from backend.services.geo_data import contains_shenzhen, load_station_poi_features
 
 
@@ -108,10 +109,7 @@ def _row_to_item(row: pd.Series) -> RecommendationItem:
             (_required_float(point[0]), _required_float(point[1]))
             for point in _safe_list(row.get("route_coordinates"))
         ],
-        expanded_trace_coordinates=[
-            (_required_float(point[0]), _required_float(point[1]))
-            for point in _safe_list(row.get("expanded_trace_coordinates"))
-        ],
+        search_trace=_row_search_trace(row.get("search_trace")),
         distance_km=_optional_float(row.get("distance_km")),
         drive_time_min=_optional_float(row.get("drive_time_min")),
         road_snap_distance_m=_optional_float(row.get("road_snap_distance_m")),
@@ -130,6 +128,15 @@ def _row_to_item(row: pd.Series) -> RecommendationItem:
 
 def _safe_list(value: Any) -> list:
     return value if isinstance(value, list) else []
+
+
+def _row_search_trace(value: Any) -> SearchTrace:
+    if not isinstance(value, dict):
+        return SearchTrace(kind="single", layers=[{"role": "single", "coordinates": []}])
+    try:
+        return SearchTrace.model_validate(value)
+    except ValidationError:
+        return SearchTrace(kind="single", layers=[{"role": "single", "coordinates": []}])
 
 
 def _optional_float(value: Any) -> float | None:

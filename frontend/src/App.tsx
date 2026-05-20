@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { fetchBoundary, fetchRecommendations } from "./api";
 import { RouteMap } from "./map/RouteMap";
-import type { Algorithm, Basemap, BoundaryGeoJson, LayerVisibility, Point, RecommendationItem } from "./types";
+import type { Algorithm, Basemap, BoundaryGeoJson, LayerVisibility, Point, RecommendationItem, SearchTraceKind } from "./types";
 
 interface FormState {
   basemap: Basemap;
@@ -82,7 +82,7 @@ const BASEMAP_LABELS: Record<Basemap, string> = {
 const ALGORITHM_LABELS: Record<Algorithm, string> = {
   astar: "A*: Estimated-time guided search",
   ucs: "UCS: Shortest travel time",
-  bfs: "BFS: Road-segment baseline",
+  bfs: "Bidirectional BFS: Two-frontier baseline",
 };
 
 const LAYER_LABELS: Array<[keyof LayerVisibility, string, string]> = [
@@ -596,11 +596,18 @@ function SearchPlaybackPanel({
 
   return (
     <>
-      <p className="panel-note">Replay the explored road area for the selected algorithm without changing the recommendation result.</p>
+      <p className="panel-note">{playbackDescription(selectedRecommendation.search_trace.kind)}</p>
       <div className="metric-grid">
         <Metric label="Algorithm" value={algorithm.toUpperCase()} />
         <Metric label="Expanded" value={`${selectedRecommendation.expanded_nodes}`} />
         <Metric label="Runtime" value={formatRuntime(selectedRecommendation.runtime_seconds)} />
+        {selectedRecommendation.search_trace.kind === "bidirectional" && (
+          <>
+            <Metric label="Forward" value={`${traceLayerSize(selectedRecommendation, "forward")}`} />
+            <Metric label="Backward" value={`${traceLayerSize(selectedRecommendation, "backward")}`} />
+            <Metric label="Meeting" value={selectedRecommendation.search_trace.meeting_node_coordinate ? "Found" : "-"} />
+          </>
+        )}
       </div>
       <div className="playback-controls">
         <button type="button" onClick={onReplay}>
@@ -701,6 +708,17 @@ function formatRuntime(seconds: number) {
 function formatPoiSummary(item: RecommendationItem) {
   if (item.poi_total_count === null) return "-";
   return `${item.poi_total_count} / ${item.poi_lifestyle_services_count ?? 0} / ${item.poi_food_beverage_count ?? 0} / ${item.poi_business_residential_count ?? 0}`;
+}
+
+function playbackDescription(kind: SearchTraceKind) {
+  if (kind === "bidirectional") {
+    return "Replay the two road-search frontiers as they expand from the start and station access node.";
+  }
+  return "Replay the explored road area for the selected algorithm without changing the recommendation result.";
+}
+
+function traceLayerSize(item: RecommendationItem, role: "forward" | "backward") {
+  return item.search_trace.layers.find((layer) => layer.role === role)?.coordinates.length ?? 0;
 }
 
 function layerSummary(layerVisibility: LayerVisibility) {

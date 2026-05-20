@@ -158,6 +158,14 @@ class _StartAccessGraph:
             return iter(self._outgoing_edges)
         return self._base_graph.successors(node)
 
+    def predecessors(self, node):
+        if node == self._start_node:
+            return iter(())
+        predecessors = self._base_graph.predecessors(node)
+        if node not in self._outgoing_edges:
+            return predecessors
+        return iter([self._start_node, *predecessors])
+
     def get_edge_data(self, u, v, default=None):
         if u == self._start_node and v in self._outgoing_edges:
             return {0: self._outgoing_edges[v]}
