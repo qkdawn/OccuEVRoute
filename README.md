@@ -80,3 +80,11 @@ features are also filtered to the Shenzhen boundary. A* uses the generated
 fallback table.
 
 Large raw datasets remain under `ML/Data/`.
+
+## Occupancy Prediction
+
+The current multi-horizon occupancy model is documented in
+`docs/models/occupancy_horizon_model.md`. It predicts station occupancy for
+arbitrary future offsets within 0-120 minutes using XGBoost, lagged occupancy
+features, time/weather/price context, POI features, and station-neighbor
+profiles.

@@ -1,0 +1,53 @@
+feature,display_feature,mean_abs_shap
+occupancy_lag_1,Previous 5 min occupancy,0.10794906
+occupancy_rolling_mean_6,30 min rolling mean,0.06911389
+occupancy_rolling_mean_12,60 min rolling mean,0.012705186
+occupancy_lag_3,Previous 15 min occupancy,0.007873521
+station_same_hour_occupancy,Station same-hour occupancy,0.004988306
+station_avg_occupancy,Station average occupancy,0.0044417065
+station_peak_avg_occupancy,Station peak average occupancy,0.0032210278
+target_hour_cos,Target hour (cos),0.0028803886
+occupancy_lag_6,Previous 30 min occupancy,0.0022834039
+prediction_horizon_min,Prediction horizon (min),0.0019367315
+occupancy_trend_12,60 min trend,0.0015180203
+current_hour_sin,Current hour (sin),0.0014478766
+temperature,Temperature,0.0012789445
+global_same_hour_occupancy,Global same-hour occupancy,0.0010455896
+humidity,Humidity,0.0009409562
+occupancy_rolling_std_12,60 min volatility,0.0008896824
+s_price,Service price,0.0007824243
+current_weekday,Current weekday,0.0007268366
+current_is_morning_peak,Current morning peak,0.000694743
+current_hour_cos,Current hour (cos),0.0006936783
+e_price,Energy price,0.0006843581
+target_is_morning_peak,Target morning peak,0.0006059603
+target_hour_sin,Target hour (sin),0.00058751635
+station_avg_duration,Station average duration,0.00058450905
+latitude,Station latitude,0.0005234337
+charge_count,Connector count,0.00051088084
+target_weekday,Target weekday,0.00047067893
+occupancy_lag_12,Previous 60 min occupancy,0.00045941485
+horizon_sqrt,Prediction horizon sqrt,0.0003196196
+neighbor_avg_distance_m,Average neighbor distance,0.00027869394
+neighbor_avg_same_hour_occupancy,Neighbor same-hour occupancy,0.00027038172
+neighbor_avg_same_weekday_hour_occupancy,Neighbor weekday-hour occupancy,0.00019602066
+poi_business_residential_count,Business/residential POI count,0.00017551212
+longitude,Station longitude,0.00017484852
+TAZID,Traffic zone,0.00015479221
+neighbor_max_station_occupancy,Neighbor max occupancy,0.00015227105
+neighbor_avg_duration,Neighbor average duration,0.00015172742
+neighbor_avg_peak_occupancy,Neighbor peak occupancy,0.00013675242
+poi_lifestyle_ratio,Lifestyle POI ratio,0.00013137428
+poi_business_residential_ratio,Business/residential POI ratio,0.000113680966
+current_is_holiday,Current holiday,0.0001036329
+neighbor_avg_station_occupancy,Neighbor average occupancy,9.7703305e-05
+current_is_evening_peak,Current evening peak,9.5644944e-05
+rain,Rainfall,8.9484674e-05
+neighbor_avg_charge_count,Neighbor connector count,8.054903e-05
+poi_total_count,Nearby POI count,6.451972e-05
+poi_food_beverage_ratio,Food/beverage POI ratio,6.362058e-05
+poi_lifestyle_services_count,Lifestyle POI count,5.397741e-05
+poi_food_beverage_count,Food/beverage POI count,4.8551065e-05
+target_is_holiday,Target holiday,3.215408e-05
+target_is_evening_peak,Target evening peak,9.9090386e-08
+neighbor_count,Nearby station count,0.0
