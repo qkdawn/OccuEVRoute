@@ -14,6 +14,7 @@ OccuEVRoute/
 ├── docs/             # Proposal, report, and slide materials
 ├── ML/               # Downloaded UrbanEV raw datasets
 ├── models/           # Trained XGBoost models and artifacts
+├── AGENTS.md         # Project-level AI coding instructions
 └── src/              # Core project code
 ```
 
