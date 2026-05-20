@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-Algorithm = Literal["astar", "ucs", "bfs"]
+Algorithm = Literal["bfs", "bidirectional_bfs", "ucs", "astar", "alt_astar"]
 SearchTraceKind = Literal["single", "bidirectional"]
 SearchTraceRole = Literal["single", "forward", "backward"]
 
@@ -59,6 +59,7 @@ class SearchTrace(BaseModel):
 class RecommendationItem(BaseModel):
     station_id: int | None
     station_display_name: str | None
+    algorithm: Algorithm
     station_latitude: float | None
     station_longitude: float | None
     station_road_latitude: float | None

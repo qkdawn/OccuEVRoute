@@ -201,16 +201,39 @@ def _bidirectional_trace(forward_nodes: list[str], backward_nodes: list[str], me
 
 
 def bfs_search(graph, start: str, goal: str) -> SearchResult:
+    """Run baseline BFS over directed road edges."""
+    started = time.perf_counter()
+    queue = deque([start])
+    parent: dict[str, str | None] = {start: None}
+    visited = {start}
+    expanded = 0
+    expanded_trace = []
+
+    while queue:
+        node = queue.popleft()
+        expanded += 1
+        expanded_trace.append(node)
+        if node == goal:
+            path = _reconstruct_path(parent, goal)
+            return _success("bfs", graph, path, started, expanded, _single_trace(expanded_trace))
+        for neighbor in graph.successors(node):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                parent[neighbor] = node
+                queue.append(neighbor)
+    return _not_found("bfs", started, expanded, _single_trace(expanded_trace))
+
+
+def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
     """Run bidirectional BFS over directed road edges.
 
-    The public algorithm key remains "bfs" for API compatibility, but the
-    result carries separate forward/backward traces so the UI can show the two
-    frontiers meeting.
+    The trace records nodes after they are popped for expansion; the meeting
+    node records the first intersection between the two visited frontiers.
     """
     started = time.perf_counter()
     if start == goal:
         return _success(
-            "bfs",
+            "bidirectional_bfs",
             graph,
             [start],
             started,
@@ -267,7 +290,7 @@ def bfs_search(graph, start: str, goal: str) -> SearchResult:
         if meeting_node is not None:
             path = _reconstruct_bidirectional_path(forward_parent, backward_parent, meeting_node)
             return _success(
-                "bfs",
+                "bidirectional_bfs",
                 graph,
                 path,
                 started,
@@ -276,7 +299,7 @@ def bfs_search(graph, start: str, goal: str) -> SearchResult:
             )
 
     return _not_found(
-        "bfs",
+        "bidirectional_bfs",
         started,
         expanded,
         _bidirectional_trace(forward_trace_nodes, backward_trace_nodes),
@@ -315,6 +338,7 @@ def astar_search(
     start: str,
     goal: str,
     landmark_heuristic: LandmarkHeuristic | None = None,
+    algorithm: str = "astar",
 ) -> SearchResult:
     started = time.perf_counter()
     heap = [(_heuristic_minutes(graph, start, goal, landmark_heuristic), 0.0, start)]
@@ -331,7 +355,7 @@ def astar_search(
         expanded_trace.append(node)
         if node == goal:
             path = _reconstruct_path(parent, goal)
-            return _success("astar", graph, path, started, expanded, _single_trace(expanded_trace))
+            return _success(algorithm, graph, path, started, expanded, _single_trace(expanded_trace))
         for neighbor in graph.successors(node):
             _, travel_time_s = _edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
@@ -340,7 +364,16 @@ def astar_search(
                 parent[neighbor] = node
                 priority = new_cost + _heuristic_minutes(graph, neighbor, goal, landmark_heuristic)
                 heapq.heappush(heap, (priority, new_cost, neighbor))
-    return _not_found("astar", started, expanded, _single_trace(expanded_trace))
+    return _not_found(algorithm, started, expanded, _single_trace(expanded_trace))
+
+
+def alt_astar_search(
+    graph,
+    start: str,
+    goal: str,
+    landmark_heuristic: LandmarkHeuristic | None = None,
+) -> SearchResult:
+    return astar_search(graph, start, goal, landmark_heuristic, algorithm="alt_astar")
 
 
 def run_search(
@@ -353,8 +386,12 @@ def run_search(
     algorithm = algorithm.lower()
     if algorithm == "bfs":
         return bfs_search(graph, start, goal)
+    if algorithm == "bidirectional_bfs":
+        return bidirectional_bfs_search(graph, start, goal)
     if algorithm == "ucs":
         return ucs_search(graph, start, goal)
-    if algorithm in {"astar", "a*"}:
-        return astar_search(graph, start, goal, landmark_heuristic)
+    if algorithm == "astar":
+        return astar_search(graph, start, goal)
+    if algorithm == "alt_astar":
+        return alt_astar_search(graph, start, goal, landmark_heuristic)
     raise ValueError(f"Unsupported algorithm: {algorithm}")

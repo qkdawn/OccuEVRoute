@@ -1,4 +1,4 @@
-export type Algorithm = "astar" | "ucs" | "bfs";
+export type Algorithm = "bfs" | "bidirectional_bfs" | "ucs" | "astar" | "alt_astar";
 export type Basemap = "gaode" | "carto" | "osm";
 
 export interface LayerVisibility {
@@ -48,6 +48,7 @@ export interface RecommendationRequest {
 export interface RecommendationItem {
   station_id: number | null;
   station_display_name: string | null;
+  algorithm: Algorithm;
   station_latitude: number | null;
   station_longitude: number | null;
   station_road_latitude: number | null;

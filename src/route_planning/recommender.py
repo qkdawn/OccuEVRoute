@@ -215,7 +215,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Recommend charging stations from a location.")
     parser.add_argument("--lat", type=float, required=True)
     parser.add_argument("--lon", type=float, required=True)
-    parser.add_argument("--algorithm", choices=["bfs", "ucs", "astar"], default="astar")
+    parser.add_argument("--algorithm", choices=["bfs", "bidirectional_bfs", "ucs", "astar", "alt_astar"], default="astar")
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--max-candidates", type=int, default=20)
     parser.add_argument("--max-search-radius-km", type=float, default=10.0)

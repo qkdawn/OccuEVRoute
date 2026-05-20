@@ -98,6 +98,7 @@ def _row_to_item(row: pd.Series) -> RecommendationItem:
     return RecommendationItem(
         station_id=station_id,
         station_display_name=f"Charging Station {station_id}" if station_id is not None else None,
+        algorithm=row.get("algorithm"),
         station_latitude=_optional_float(row.get("station_latitude")),
         station_longitude=_optional_float(row.get("station_longitude")),
         station_road_latitude=_optional_float(row.get("station_road_latitude")),

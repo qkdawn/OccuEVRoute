@@ -80,9 +80,11 @@ const BASEMAP_LABELS: Record<Basemap, string> = {
 };
 
 const ALGORITHM_LABELS: Record<Algorithm, string> = {
-  astar: "A*: Estimated-time guided search",
-  ucs: "UCS: Shortest travel time",
-  bfs: "Bidirectional BFS: Two-frontier baseline",
+  bfs: "BFS: Unweighted baseline",
+  bidirectional_bfs: "Bidirectional BFS: Two-frontier search",
+  ucs: "UCS: Travel-time baseline",
+  astar: "A*: Straight-line heuristic",
+  alt_astar: "ALT A*: Landmark heuristic",
 };
 
 const LAYER_LABELS: Array<[keyof LayerVisibility, string, string]> = [
@@ -304,7 +306,6 @@ export function App() {
             if (id === "playback") {
               return (
                 <SearchPlaybackPanel
-                  algorithm={form.algorithm}
                   selectedRecommendation={selectedRecommendation}
                   searchPlaybackProgress={searchPlaybackProgress}
                   isPlaybackRunning={isPlaybackRunning}
@@ -574,7 +575,6 @@ function SelectedRoutePanel({ selectedRecommendation }: { selectedRecommendation
 }
 
 function SearchPlaybackPanel({
-  algorithm,
   selectedRecommendation,
   searchPlaybackProgress,
   isPlaybackRunning,
@@ -582,7 +582,6 @@ function SearchPlaybackPanel({
   onTogglePlayback,
   onProgressChange,
 }: {
-  algorithm: Algorithm;
   selectedRecommendation: RecommendationItem | null;
   searchPlaybackProgress: number;
   isPlaybackRunning: boolean;
@@ -598,7 +597,7 @@ function SearchPlaybackPanel({
     <>
       <p className="panel-note">{playbackDescription(selectedRecommendation.search_trace.kind)}</p>
       <div className="metric-grid">
-        <Metric label="Algorithm" value={algorithm.toUpperCase()} />
+        <Metric label="Algorithm" value={algorithmShortLabel(selectedRecommendation.algorithm)} />
         <Metric label="Expanded" value={`${selectedRecommendation.expanded_nodes}`} />
         <Metric label="Runtime" value={formatRuntime(selectedRecommendation.runtime_seconds)} />
         {selectedRecommendation.search_trace.kind === "bidirectional" && (
@@ -715,6 +714,13 @@ function playbackDescription(kind: SearchTraceKind) {
     return "Replay the two road-search frontiers as they expand from the start and station access node.";
   }
   return "Replay the explored road area for the selected algorithm without changing the recommendation result.";
+}
+
+function algorithmShortLabel(algorithm: Algorithm) {
+  if (algorithm === "bidirectional_bfs") return "Bidirectional BFS";
+  if (algorithm === "alt_astar") return "ALT A*";
+  if (algorithm === "astar") return "A*";
+  return algorithm.toUpperCase();
 }
 
 function traceLayerSize(item: RecommendationItem, role: "forward" | "backward") {

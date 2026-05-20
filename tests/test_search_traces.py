@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.schemas import SearchTrace
 from graph_loader import _StartAccessGraph
-from search_algorithms import astar_search, bfs_search, ucs_search
+from search_algorithms import astar_search, bfs_search, bidirectional_bfs_search, run_search, ucs_search
 
 
 def _graph(edges: list[tuple[str, str]]) -> nx.MultiDiGraph:
@@ -34,12 +34,24 @@ def _layer_nodes(result, role: str) -> list[str]:
     return layer.nodes
 
 
-def test_bfs_uses_bidirectional_trace_on_directed_graph() -> None:
+def test_bfs_returns_single_trace_on_directed_graph() -> None:
     graph = _graph([("A", "B"), ("B", "C"), ("C", "D")])
 
     result = bfs_search(graph, "A", "D")
 
     assert result.algorithm == "bfs"
+    assert result.path == ["A", "B", "C", "D"]
+    assert result.search_trace.kind == "single"
+    assert _layer_nodes(result, "single") == ["A", "B", "C", "D"]
+    assert result.search_trace.meeting_node is None
+
+
+def test_bidirectional_bfs_uses_two_frontier_trace_on_directed_graph() -> None:
+    graph = _graph([("A", "B"), ("B", "C"), ("C", "D")])
+
+    result = bidirectional_bfs_search(graph, "A", "D")
+
+    assert result.algorithm == "bidirectional_bfs"
     assert result.path == ["A", "B", "C", "D"]
     assert result.search_trace.kind == "bidirectional"
     assert _layer_nodes(result, "forward") == ["A", "B"]
@@ -56,17 +68,28 @@ def test_bfs_supports_start_access_graph_predecessors() -> None:
         {"B": {"length": 250.0, "travel_time": 15.0}},
     )
 
-    result = bfs_search(start_graph, "__start_access__", "D")
+    result = bidirectional_bfs_search(start_graph, "__start_access__", "D")
 
     assert result.path == ["__start_access__", "B", "C", "D"]
     assert result.search_trace.kind == "bidirectional"
     assert result.search_trace.meeting_node == "C"
 
 
-def test_bfs_start_equals_goal_returns_bidirectional_single_point_trace() -> None:
+def test_bfs_start_equals_goal_returns_single_trace() -> None:
     graph = _graph([("A", "B")])
 
     result = bfs_search(graph, "A", "A")
+
+    assert result.path == ["A"]
+    assert result.search_trace.kind == "single"
+    assert _layer_nodes(result, "single") == ["A"]
+    assert result.search_trace.meeting_node is None
+
+
+def test_bidirectional_bfs_start_equals_goal_returns_two_frontier_trace() -> None:
+    graph = _graph([("A", "B")])
+
+    result = bidirectional_bfs_search(graph, "A", "A")
 
     assert result.path == ["A"]
     assert result.search_trace.kind == "bidirectional"
@@ -75,10 +98,22 @@ def test_bfs_start_equals_goal_returns_bidirectional_single_point_trace() -> Non
     assert result.search_trace.meeting_node == "A"
 
 
-def test_bfs_no_path_returns_empty_path_with_partial_bidirectional_trace() -> None:
+def test_bfs_no_path_returns_empty_path_with_single_trace() -> None:
     graph = _graph([("A", "B"), ("C", "D")])
 
     result = bfs_search(graph, "A", "D")
+
+    assert result.path == []
+    assert not result.path_found
+    assert result.search_trace.kind == "single"
+    assert _layer_nodes(result, "single") == ["A", "B"]
+    assert result.search_trace.meeting_node is None
+
+
+def test_bidirectional_bfs_no_path_returns_empty_path_with_partial_bidirectional_trace() -> None:
+    graph = _graph([("A", "B"), ("C", "D")])
+
+    result = bidirectional_bfs_search(graph, "A", "D")
 
     assert result.path == []
     assert not result.path_found
@@ -125,3 +160,37 @@ def test_search_trace_schema_requires_bidirectional_layers() -> None:
                 "layers": [{"role": "forward", "coordinates": [(1.0, 2.0)]}],
             }
         )
+
+
+class _ExplodingLandmark:
+    def estimate_minutes(self, node: str, goal: str) -> float | None:
+        raise AssertionError("baseline A* should not call landmark heuristic")
+
+
+class _CountingLandmark:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def estimate_minutes(self, node: str, goal: str) -> float | None:
+        self.calls += 1
+        return 0.0
+
+
+def test_run_search_astar_ignores_landmark_heuristic() -> None:
+    graph = _graph([("A", "B"), ("B", "C")])
+
+    result = run_search(graph, "A", "C", "astar", _ExplodingLandmark())
+
+    assert result.algorithm == "astar"
+    assert result.path == ["A", "B", "C"]
+
+
+def test_run_search_alt_astar_uses_landmark_heuristic() -> None:
+    graph = _graph([("A", "B"), ("B", "C")])
+    landmark = _CountingLandmark()
+
+    result = run_search(graph, "A", "C", "alt_astar", landmark)
+
+    assert result.algorithm == "alt_astar"
+    assert result.path == ["A", "B", "C"]
+    assert landmark.calls > 0
