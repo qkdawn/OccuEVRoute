@@ -29,13 +29,41 @@ src/
 
 ## Run the Application
 
-Docker:
+### Quick start with Docker
+
+The app expects route-planning artifacts under `data/processed/`. These files are
+not committed to Git because they are generated and large. Download the processed
+data package from GitHub Releases:
+
+- [occuevroute-processed-data-2026-05-22.zip](https://github.com/qkdawn/OccuEVRoute/releases/download/data-v2026-05-22/occuevroute-processed-data-2026-05-22.zip)
+
+Extract the zip so the files sit directly under `data/processed/`, then verify:
+
+```powershell
+python scripts/check_route_data.py
+```
+
+Start the app:
 
 ```powershell
 docker compose up --build
 ```
 
 Then open `http://localhost:9090`.
+
+The backend is available at `http://localhost:9000`; a smoke test is:
+
+```powershell
+Invoke-RestMethod http://localhost:9000/api/health
+```
+
+### Local development
+
+Install backend/runtime dependencies:
+
+```powershell
+python -m pip install -r backend/requirements.txt
+```
 
 Backend:
 
@@ -60,10 +88,18 @@ Route recommendation uses the enhanced road network by default:
 - `data/processed/shenzhen_drive_with_station_access.graphml`
 - `data/processed/station_road_access.csv`
 - `data/processed/landmark_distances.npz`
+- `data/processed/ch_index.pkl`
 - `data/processed/station_poi_features.csv`
 - `data/processed/shenzhen_boundary.geojson`
 
-If these files are missing, run:
+To regenerate data from source inputs, install the full data-processing
+environment:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Then run:
 
 ```powershell
 python src/data_processing/build_shenzhen_boundary_geojson.py
@@ -71,6 +107,7 @@ python src/data_processing/download_road_network_tiles.py
 python src/data_processing/build_station_graph.py
 python src/data_processing/build_station_poi_features.py
 python src/data_processing/build_landmark_distances.py
+python src/route_planning/ch_preprocess.py
 ```
 
 The road download step includes regular drivable roads plus `highway=service`
@@ -78,9 +115,25 @@ internal roads, filters out `access=private/no` edges, clips the merged graph
 to the Shenzhen boundary, and keeps the main Shenzhen road component. Station
 features are also filtered to the Shenzhen boundary. A* uses the generated
 16-landmark ALT table with directed forward/reverse distances and an undirected
-fallback table.
+fallback table. CH Dijkstra uses the generated `ch_index.pkl` contraction
+hierarchy index.
 
 Large raw datasets remain under `ML/Data/`.
+
+## Release Data Package
+
+Processed route data should be published as a GitHub Release asset rather than
+committed to the repository. The current local package is:
+
+```text
+release/occuevroute-processed-data-2026-05-22.zip
+```
+
+It is published on the `data-v2026-05-22` GitHub Release:
+
+```text
+https://github.com/qkdawn/OccuEVRoute/releases/tag/data-v2026-05-22
+```
 
 ## Occupancy Prediction
 
