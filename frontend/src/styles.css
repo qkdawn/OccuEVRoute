@@ -1,31 +1,36 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap");
+
 :root {
-  --bg: #e9eef2;
-  --surface: #f8faf9;
-  --surface-muted: #eef4f2;
+  --bg: #eef5f1;
+  --surface: #fbfdfb;
+  --surface-muted: #edf6f1;
   --surface-strong: #ffffff;
-  --panel-tint: #f3f7f5;
-  --border: #d4ddd9;
-  --border-strong: #aebdb7;
-  --text: #13201d;
-  --text-muted: #66746f;
-  --text-soft: #899691;
-  --accent: #0f766e;
-  --accent-hover: #0b625c;
-  --accent-soft: #dcefeb;
+  --panel-tint: #f3faf6;
+  --border: #d2e2d9;
+  --border-strong: #a9c0b3;
+  --text: #17251f;
+  --text-muted: #66786f;
+  --text-soft: #8a9a92;
+  --accent: #168a5b;
+  --accent-hover: #116f49;
+  --accent-soft: #dff2e9;
+  --secondary: #0e7490;
+  --route: #1d4ed8;
   --focus: #0e7490;
-  --success: #15803d;
-  --danger: #9f1239;
+  --success: #22a06b;
+  --warning: #d97706;
+  --danger: #be123c;
   --danger-bg: #fff1f2;
   --danger-border: #fecdd3;
-  --row-selected: #e3f3ef;
+  --row-selected: #e2f5ec;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --radius: 8px;
-  --shadow-soft: 0 18px 42px rgba(19, 32, 29, 0.12);
-  --shadow-tight: 0 8px 22px rgba(15, 118, 110, 0.12);
+  --shadow-soft: 0 18px 42px rgba(23, 37, 31, 0.12);
+  --shadow-tight: 0 8px 22px rgba(22, 138, 91, 0.13);
 }
 
 * {
@@ -45,9 +50,10 @@ body {
   overflow: hidden;
   color: var(--text);
   background:
-    radial-gradient(circle at 12% 8%, rgba(15, 118, 110, 0.08), transparent 28%),
-    linear-gradient(135deg, #e4ebe8 0%, #f2f5f3 58%, #e7edf1 100%);
-  font-family: "Aptos", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    radial-gradient(circle at 12% 8%, rgba(22, 138, 91, 0.09), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(14, 116, 144, 0.07), transparent 30%),
+    linear-gradient(135deg, #eef5f1 0%, #f7fbf8 56%, #e8f3ed 100%);
+  font-family: "Outfit", "Source Sans 3", "Aptos", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -272,12 +278,12 @@ input:hover {
 .primary-action {
   border: 0;
   color: #ffffff;
-  background: linear-gradient(180deg, #12877e 0%, var(--accent) 100%);
-  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.24);
+  background: linear-gradient(180deg, #1a9966 0%, var(--accent) 100%);
+  box-shadow: 0 12px 24px rgba(22, 138, 91, 0.24);
 }
 
 .primary-action:hover:not(:disabled) {
-  background: linear-gradient(180deg, #0f7a72 0%, var(--accent-hover) 100%);
+  background: linear-gradient(180deg, #168a5b 0%, var(--accent-hover) 100%);
   transform: translateY(-1px);
 }
 
@@ -354,7 +360,7 @@ input:hover {
   overflow: hidden;
   border: 1px solid rgba(174, 189, 183, 0.76);
   border-radius: 8px;
-  background: #dbe5e2;
+  background: #dce9e3;
   box-shadow: var(--shadow-soft);
 }
 
@@ -395,7 +401,7 @@ input:hover {
 }
 
 .map-status-strip strong {
-  color: #064e48;
+  color: #0b5138;
   background: var(--accent-soft);
 }
 
@@ -454,8 +460,18 @@ input:hover {
 }
 
 .route-hero div:first-child {
-  border-color: rgba(15, 118, 110, 0.26);
-  background: linear-gradient(180deg, #ffffff 0%, #edf8f5 100%);
+  border-color: rgba(34, 160, 107, 0.28);
+  background: linear-gradient(180deg, #ffffff 0%, #eaf8f0 100%);
+}
+
+.route-hero div:nth-child(2) {
+  border-color: rgba(29, 78, 216, 0.18);
+  background: linear-gradient(180deg, #ffffff 0%, #edf3ff 100%);
+}
+
+.route-hero div:nth-child(3) {
+  border-color: rgba(34, 160, 107, 0.22);
+  background: linear-gradient(180deg, #ffffff 0%, #edf9f2 100%);
 }
 
 .route-hero span,
@@ -517,14 +533,14 @@ input:hover {
 }
 
 .ranking-row:hover {
-  border-color: rgba(15, 118, 110, 0.32);
+  border-color: rgba(22, 138, 91, 0.34);
   background: #ffffff;
   box-shadow: var(--shadow-tight);
   transform: translateY(-1px);
 }
 
 .ranking-row.selected-row {
-  border-color: rgba(15, 118, 110, 0.42);
+  border-color: rgba(22, 138, 91, 0.44);
   background: var(--row-selected);
   box-shadow: inset 3px 0 0 var(--accent);
 }
@@ -579,6 +595,14 @@ input:hover {
   font-size: 12px;
   font-weight: 780;
   line-height: 1.15;
+}
+
+.ranking-row .result-stat:nth-last-child(2) strong {
+  color: var(--route);
+}
+
+.ranking-row .result-stat:last-child strong {
+  color: var(--success);
 }
 
 .error-box {
