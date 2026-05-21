@@ -6,6 +6,7 @@ import heapq
 import time
 
 from ch_index import CHIndex
+from graph_metrics import edge_metrics, path_metrics
 from search_algorithms import SearchResult, SearchTrace, SearchTraceLayer
 
 
@@ -97,7 +98,7 @@ def _seed_forward_frontier(
         neighbor = str(neighbor)
         if not ch_index.contains(neighbor):
             continue
-        _, travel_time_s = _edge_metrics(graph, start, neighbor)
+        _, travel_time_s = edge_metrics(graph, start, neighbor)
         cost = travel_time_s / 60.0
         if cost < best.get(neighbor, float("inf")):
             best[neighbor] = cost
@@ -169,7 +170,7 @@ def _result(
     ch_index: CHIndex,
 ) -> SearchResult:
     if path_found:
-        distance_km, drive_time_min = _path_metrics(graph, path, ch_index)
+        distance_km, drive_time_min = path_metrics(graph, path)
     else:
         distance_km = None
         drive_time_min = None
@@ -191,49 +192,3 @@ def _result(
         ),
     )
 
-
-def _path_metrics(graph, path: list[str], ch_index: CHIndex) -> tuple[float, float]:
-    total_length_m = 0.0
-    total_minutes = 0.0
-    for u, v in zip(path, path[1:]):
-        length_m, travel_time_s = _edge_metrics(graph, u, v)
-        if travel_time_s == 0.0 and ch_index.contains(u) and ch_index.contains(v):
-            edge_id = _base_ch_edge_id(ch_index, u, v)
-            if edge_id is not None:
-                length_m, total_edge_minutes = ch_index.unpack_edge_metrics(edge_id)
-                total_length_m += length_m
-                total_minutes += total_edge_minutes
-                continue
-        total_length_m += length_m
-        total_minutes += travel_time_s / 60.0
-    return total_length_m / 1000.0, total_minutes
-
-
-def _base_ch_edge_id(ch_index: CHIndex, u: str, v: str) -> int | None:
-    for edge_id in ch_index.upward.get(u, []):
-        edge = ch_index.edge(edge_id)
-        if edge.v == v:
-            return edge_id
-    for edge_id in ch_index.reverse_upward.get(u, []):
-        edge = ch_index.edge(edge_id)
-        if edge.u == v:
-            return edge_id
-    return None
-
-
-def _edge_metrics(graph, u: str, v: str) -> tuple[float, float]:
-    edge_data = graph.get_edge_data(u, v, default={})
-    values = list(edge_data.values()) if isinstance(edge_data, dict) else []
-    if not values:
-        return 0.0, 0.0
-    best = min(values, key=lambda attrs: _safe_float(attrs.get("travel_time"), float("inf")))
-    length_m = _safe_float(best.get("length"), 0.0)
-    travel_time_s = _safe_float(best.get("travel_time"), 0.0)
-    return length_m, travel_time_s
-
-
-def _safe_float(value, default: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default

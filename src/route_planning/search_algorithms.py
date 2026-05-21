@@ -9,10 +9,11 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Literal
 
+from graph_metrics import DEFAULT_SPEED_KPH, edge_metrics, path_metrics
 from landmark_heuristic import LandmarkHeuristic
 
 
-DEFAULT_HEURISTIC_SPEED_KPH = 40.0
+DEFAULT_HEURISTIC_SPEED_KPH = DEFAULT_SPEED_KPH
 
 SearchTraceKind = Literal["single", "bidirectional"]
 SearchTraceRole = Literal["single", "forward", "backward"]
@@ -89,37 +90,9 @@ def _start_access_landmark_heuristic(graph, goal: str, landmark_heuristic: Landm
         neighbor_estimate = landmark_heuristic.estimate_minutes(neighbor, goal)
         if neighbor_estimate is None:
             continue
-        _, travel_time_s = _edge_metrics(graph, "__start_access__", neighbor)
+        _, travel_time_s = edge_metrics(graph, "__start_access__", neighbor)
         estimates.append(travel_time_s / 60 + neighbor_estimate)
     return min(estimates) if estimates else None
-
-
-def _best_edge_metric(edge_data: dict, key: str, default: float = 0.0) -> float:
-    values = []
-    for attrs in edge_data.values():
-        value = attrs.get(key, default)
-        try:
-            values.append(float(value))
-        except (TypeError, ValueError):
-            continue
-    return min(values) if values else default
-
-
-def _edge_metrics(graph, u: str, v: str) -> tuple[float, float]:
-    edge_data = graph.get_edge_data(u, v, default={})
-    length_m = _best_edge_metric(edge_data, "length", 0.0)
-    travel_time_s = _best_edge_metric(edge_data, "travel_time", length_m / 1000 / DEFAULT_HEURISTIC_SPEED_KPH * 3600)
-    return length_m, travel_time_s
-
-
-def _path_metrics(graph, path: list[str]) -> tuple[float, float]:
-    total_length_m = 0.0
-    total_time_s = 0.0
-    for u, v in zip(path, path[1:]):
-        length_m, travel_time_s = _edge_metrics(graph, u, v)
-        total_length_m += length_m
-        total_time_s += travel_time_s
-    return total_length_m / 1000, total_time_s / 60
 
 
 def _reconstruct_path(parent: dict[str, str | None], goal: str) -> list[str]:
@@ -172,7 +145,7 @@ def _success(
     expanded_nodes: int,
     search_trace: SearchTrace,
 ) -> SearchResult:
-    distance_km, drive_time_min = _path_metrics(graph, path)
+    distance_km, drive_time_min = path_metrics(graph, path)
     return SearchResult(
         algorithm=algorithm,
         path=path,
@@ -324,7 +297,7 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
             path = _reconstruct_path(parent, goal)
             return _success("ucs", graph, path, started, expanded, _single_trace(expanded_trace))
         for neighbor in graph.successors(node):
-            _, travel_time_s = _edge_metrics(graph, node, neighbor)
+            _, travel_time_s = edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost
@@ -357,7 +330,7 @@ def astar_search(
             path = _reconstruct_path(parent, goal)
             return _success(algorithm, graph, path, started, expanded, _single_trace(expanded_trace))
         for neighbor in graph.successors(node):
-            _, travel_time_s = _edge_metrics(graph, node, neighbor)
+            _, travel_time_s = edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost

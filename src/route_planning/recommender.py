@@ -10,6 +10,7 @@ import pandas as pd
 from candidate_selector import select_nearby_stations
 from ch_index import CHIndex
 from constraints import UserConstraints, post_csp_check, pre_csp_check
+from graph_metrics import best_edge_attrs
 from graph_loader import build_graph_with_start_access, load_road_graph, load_station_access
 from landmark_heuristic import LandmarkHeuristic
 from search_algorithms import SearchResult, run_search
@@ -136,23 +137,15 @@ def _nodes_to_coordinates(graph, nodes: list[str]) -> list[tuple[float, float]]:
 
 
 def _edge_route_coordinates(graph, u: str, v: str) -> list[tuple[float, float]]:
-    edge_data = graph.get_edge_data(u, v, default={})
-    if not edge_data:
+    best_attrs = best_edge_attrs(graph, u, v)
+    if not best_attrs:
         return [_node_coordinates(graph, u), _node_coordinates(graph, v)]
 
-    best_attrs = min(edge_data.values(), key=lambda attrs: _safe_float(attrs.get("travel_time"), float("inf")))
     geometry = best_attrs.get("geometry")
     if geometry is None:
         return [_node_coordinates(graph, u), _node_coordinates(graph, v)]
 
     return [(float(lat), float(lon)) for lon, lat in geometry.coords]
-
-
-def _safe_float(value, default: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _rejected_result(station: pd.Series, algorithm: str, reason: str) -> dict:

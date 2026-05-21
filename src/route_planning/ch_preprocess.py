@@ -10,8 +10,8 @@ from pathlib import Path
 import networkx as nx
 
 from ch_index import CHEdge, CHIndex, DEFAULT_CH_INDEX_FILE
+from graph_metrics import DEFAULT_SPEED_KPH, safe_float
 from graph_loader import DEFAULT_GRAPH_FILE, _restore_graphml_edge_types
-from search_algorithms import DEFAULT_HEURISTIC_SPEED_KPH
 
 
 DEFAULT_WITNESS_SETTLED_LIMIT = 240
@@ -205,18 +205,16 @@ def _node_coordinate(graph, node: str, key: str) -> float:
 
 
 def _edge_minutes(attrs: dict) -> float:
-    try:
-        return float(attrs["travel_time"]) / 60.0
-    except (KeyError, TypeError, ValueError):
-        length_m = _edge_length_m(attrs)
-        return length_m / 1000.0 / DEFAULT_HEURISTIC_SPEED_KPH * 60.0
+    length_m = _edge_length_m(attrs)
+    travel_time_s = safe_float(
+        attrs.get("travel_time"),
+        length_m / 1000.0 / DEFAULT_SPEED_KPH * 3600.0,
+    )
+    return travel_time_s / 60.0
 
 
 def _edge_length_m(attrs: dict) -> float:
-    try:
-        return float(attrs["length"])
-    except (KeyError, TypeError, ValueError):
-        return 0.0
+    return safe_float(attrs.get("length"), 0.0)
 
 
 def parse_args() -> argparse.Namespace:
