@@ -263,8 +263,9 @@ export function App() {
 
       <section className="map-panel" aria-label="Route planning map">
         <div className="map-status-strip">
-          <span>{selectedPoint ? "Start location selected" : "Choose a Shenzhen start location"}</span>
-          <strong>{recommendations.length ? `${recommendations.length} candidates ranked` : "No run yet"}</strong>
+          <span>{selectedPoint ? "Start selected" : "Choose Shenzhen start"}</span>
+          <strong>{algorithmShortLabel(form.algorithm)}</strong>
+          <span>{recommendations.length ? `${recommendations.length} ranked` : "No run"}</span>
         </div>
         <RouteMap
           basemap={form.basemap}
@@ -397,7 +398,7 @@ function CollapsiblePanel({
           <strong>{title}</strong>
           {!isOpen && <em>{summary}</em>}
         </span>
-        <span aria-hidden="true">{isOpen ? "-" : "+"}</span>
+        <span className="panel-indicator" aria-hidden="true" />
       </button>
       {isOpen && <div className="panel-body">{children}</div>}
     </section>
@@ -513,33 +514,33 @@ function RecommendationListPanel({
   }
 
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Station</th>
-            <th>time</th>
-            <th>km</th>
-            <th>SOC</th>
-          </tr>
-        </thead>
-        <tbody>
-          {recommendations.map((item, index) => (
-            <tr
-              key={`${item.station_id}-${index}`}
-              className={[item.station_id === selectedStationId ? "selected-row" : "", index === 0 ? "top-row" : ""].filter(Boolean).join(" ")}
-              onClick={() => item.station_id !== null && onStationSelect(item.station_id)}
-            >
-              <td data-label="#">{index === 0 ? "Top" : index + 1}</td>
-              <td data-label="Station">{item.station_display_name ?? item.station_id}</td>
-              <td data-label="Time">{formatMetric(item.drive_time_min)}</td>
-              <td data-label="Distance">{formatMetric(item.distance_km)}</td>
-              <td data-label="SOC">{item.arrival_soc === null ? "-" : `${(item.arrival_soc * 100).toFixed(1)}%`}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="ranking-list">
+      {recommendations.map((item, index) => (
+        <button
+          type="button"
+          key={`${item.station_id}-${index}`}
+          className={["ranking-row", item.station_id === selectedStationId ? "selected-row" : "", index === 0 ? "top-row" : ""].filter(Boolean).join(" ")}
+          onClick={() => item.station_id !== null && onStationSelect(item.station_id)}
+        >
+          <span className="rank-token">{index === 0 ? "Top" : index + 1}</span>
+          <span className="station-cell">
+            <strong>{item.station_display_name ?? item.station_id}</strong>
+            <small>{algorithmShortLabel(item.algorithm)}</small>
+          </span>
+          <span className="result-stat">
+            <small>time</small>
+            <strong>{formatMetric(item.drive_time_min)}</strong>
+          </span>
+          <span className="result-stat">
+            <small>km</small>
+            <strong>{formatMetric(item.distance_km)}</strong>
+          </span>
+          <span className="result-stat">
+            <small>SOC</small>
+            <strong>{item.arrival_soc === null ? "-" : `${(item.arrival_soc * 100).toFixed(1)}%`}</strong>
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
