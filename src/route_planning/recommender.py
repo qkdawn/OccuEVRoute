@@ -8,11 +8,9 @@ from dataclasses import asdict
 import pandas as pd
 
 from candidate_selector import select_nearby_stations
-from ch_index import CHIndex
 from constraints import UserConstraints, post_csp_check, pre_csp_check
 from graph_metrics import best_edge_attrs
 from graph_loader import build_graph_with_start_access, load_road_graph, load_station_access
-from landmark_heuristic import LandmarkHeuristic
 from search_algorithms import SearchContext, SearchResult, run_search
 
 
@@ -24,15 +22,13 @@ def recommend_charging_stations(
     top_k: int = 3,
     graph=None,
     stations: pd.DataFrame | None = None,
-    landmark_heuristic: LandmarkHeuristic | None = None,
-    ch_index: CHIndex | None = None,
     search_context: SearchContext | None = None,
 ) -> pd.DataFrame:
     """Recommend top charging stations using search + CSP checks."""
     constraints = constraints or UserConstraints()
     graph = graph if graph is not None else load_road_graph()
     stations = stations if stations is not None else load_station_access()
-    search_context = search_context or SearchContext(landmark_heuristic=landmark_heuristic, ch_index=ch_index)
+    search_context = search_context or SearchContext()
     search_graph, start_node, start_snap = build_graph_with_start_access(graph, user_latitude, user_longitude)
     start_node_latitude = float(start_snap["latitude"])
     start_node_longitude = float(start_snap["longitude"])
@@ -229,6 +225,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _cli_search_context(algorithm: str) -> SearchContext:
+    if algorithm == "alt_astar":
+        from landmark_heuristic import LandmarkHeuristic
+
+        landmark_heuristic = LandmarkHeuristic.load()
+        if landmark_heuristic is None:
+            raise ValueError("ALT landmark table is required. Run src/data_processing/build_landmark_distances.py.")
+        return SearchContext(landmark_heuristic=landmark_heuristic)
+    if algorithm == "ch_bidirectional_dijkstra":
+        from ch_index import CHIndex
+
+        return SearchContext(ch_index=CHIndex.load())
+    return SearchContext()
+
+
 def main() -> None:
     args = parse_args()
     user_constraints = UserConstraints(
@@ -247,7 +258,7 @@ def main() -> None:
         algorithm=args.algorithm,
         constraints=user_constraints,
         top_k=args.top_k,
-        ch_index=CHIndex.load() if args.algorithm == "ch_bidirectional_dijkstra" else None,
+        search_context=_cli_search_context(args.algorithm),
     )
     print("constraints:", asdict(user_constraints))
     if result.empty:

@@ -35,6 +35,7 @@ class CHBuilder:
         self.ranks: dict[str, int] = {}
         self.uncontracted = {str(node) for node in graph.nodes}
         self.edges: dict[int, CHEdge] = {}
+        self.active_edge_ids: set[int] = set()
         self.adjacency: dict[str, dict[str, WeightedEdge]] = {str(node): {} for node in graph.nodes}
         self.reverse: dict[str, dict[str, WeightedEdge]] = {str(node): {} for node in graph.nodes}
         self.next_edge_id = 0
@@ -60,26 +61,28 @@ class CHBuilder:
             self.uncontracted.remove(node)
             index = len(self.ranks)
             if self.progress_interval and index % self.progress_interval == 0:
-                shortcut_count = sum(1 for edge in self.edges.values() if edge.is_shortcut)
+                shortcut_count = sum(1 for edge_id in self.active_edge_ids if self.edges[edge_id].is_shortcut)
                 print(
                     f"contracted {index:,}/{total_nodes:,} nodes, "
-                    f"edges={len(self.edges):,}, shortcuts={shortcut_count:,}",
+                    f"edges={len(self.active_edge_ids):,}, shortcuts={shortcut_count:,}",
                     flush=True,
                 )
         upward: dict[str, list[int]] = {}
         reverse_upward: dict[str, list[int]] = {}
-        for edge in self.edges.values():
+        index_edges = self._index_edges()
+        for edge_id in self.active_edge_ids:
+            edge = self.edges[edge_id]
             if self.ranks[edge.u] < self.ranks[edge.v]:
                 upward.setdefault(edge.u, []).append(edge.id)
             elif self.ranks[edge.u] > self.ranks[edge.v]:
                 reverse_upward.setdefault(edge.v, []).append(edge.id)
         return CHIndex(
             ranks=self.ranks,
-            upward={node: sorted(edges, key=lambda edge_id: self.edges[edge_id].v) for node, edges in upward.items()},
+            upward={node: sorted(edges, key=lambda edge_id: index_edges[edge_id].v) for node, edges in upward.items()},
             reverse_upward={
-                node: sorted(edges, key=lambda edge_id: self.edges[edge_id].u) for node, edges in reverse_upward.items()
+                node: sorted(edges, key=lambda edge_id: index_edges[edge_id].u) for node, edges in reverse_upward.items()
             },
-            edges=self.edges,
+            edges=index_edges,
         )
 
     def _load_base_edges(self, graph) -> None:
@@ -165,13 +168,27 @@ class CHBuilder:
         current = self.adjacency.setdefault(u, {}).get(v)
         if current is not None and current.weight_min <= weight_min:
             return current.edge_id
+        if current is not None:
+            self.active_edge_ids.discard(current.edge_id)
         edge_id = self.next_edge_id
         self.next_edge_id += 1
         edge = CHEdge(edge_id, u, v, weight_min, length_m, via_node, left_edge_id, right_edge_id)
         self.edges[edge_id] = edge
+        self.active_edge_ids.add(edge_id)
         self.adjacency.setdefault(u, {})[v] = WeightedEdge(edge_id, weight_min)
         self.reverse.setdefault(v, {})[u] = WeightedEdge(edge_id, weight_min)
         return edge_id
+
+    def _index_edges(self) -> dict[int, CHEdge]:
+        needed = set(self.active_edge_ids)
+        stack = list(self.active_edge_ids)
+        while stack:
+            edge = self.edges[stack.pop()]
+            for child_id in [edge.left_edge_id, edge.right_edge_id]:
+                if child_id is not None and child_id not in needed:
+                    needed.add(child_id)
+                    stack.append(child_id)
+        return {edge_id: self.edges[edge_id] for edge_id in sorted(needed)}
 
 
 def build_ch_index(
@@ -180,21 +197,6 @@ def build_ch_index(
     progress_interval: int = 0,
 ) -> CHIndex:
     return CHBuilder(graph, witness_settled_limit, progress_interval).build()
-
-
-def compute_node_ranks(graph) -> dict[str, int]:
-    nodes = [str(node) for node in graph.nodes]
-    ordered = sorted(
-        nodes,
-        key=lambda node: (
-            int(graph.in_degree(node)) + int(graph.out_degree(node)),
-            int(graph.in_degree(node)) * int(graph.out_degree(node)),
-            _node_coordinate(graph, node, "x"),
-            _node_coordinate(graph, node, "y"),
-            node,
-        ),
-    )
-    return {node: rank for rank, node in enumerate(ordered)}
 
 
 def _node_coordinate(graph, node: str, key: str) -> float:

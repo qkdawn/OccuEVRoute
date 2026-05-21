@@ -16,9 +16,9 @@ CH_ALGORITHM = "ch_bidirectional_dijkstra"
 def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHIndex) -> SearchResult:
     started = time.perf_counter()
     if start == goal:
-        return _result(graph, [start], True, 1, started, [start], [goal], start, ch_index)
+        return _result(graph, [start], True, 1, started, [start], [goal], start)
     if not ch_index.contains(goal):
-        return _result(graph, [], False, 0, started, [], [], None, ch_index)
+        return _result(graph, [], False, 0, started, [], [], None)
 
     forward_heap: list[tuple[float, str]] = []
     forward_best: dict[str, float] = {}
@@ -48,7 +48,7 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
             forward_settled.add(node)
             expanded += 1
             forward_trace.append(node)
-            if node in backward_settled and cost + backward_best[node] < best_total:
+            if node in backward_best and cost + backward_best[node] < best_total:
                 best_total = cost + backward_best[node]
                 meeting_node = node
             for edge_id in ch_index.upward.get(node, []):
@@ -58,7 +58,7 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                     forward_best[edge.v] = new_cost
                     forward_parent[edge.v] = (node, edge_id)
                     heapq.heappush(forward_heap, (new_cost, edge.v))
-                if edge.v in backward_settled and new_cost + backward_best[edge.v] < best_total:
+                if edge.v in backward_best and new_cost + backward_best[edge.v] < best_total:
                     best_total = new_cost + backward_best[edge.v]
                     meeting_node = edge.v
         else:
@@ -68,7 +68,7 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
             backward_settled.add(node)
             expanded += 1
             backward_trace.append(node)
-            if node in forward_settled and cost + forward_best[node] < best_total:
+            if node in forward_best and cost + forward_best[node] < best_total:
                 best_total = cost + forward_best[node]
                 meeting_node = node
             for edge_id in ch_index.reverse_upward.get(node, []):
@@ -78,15 +78,15 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                     backward_best[edge.u] = new_cost
                     backward_parent[edge.u] = (node, edge_id)
                     heapq.heappush(backward_heap, (new_cost, edge.u))
-                if edge.u in forward_settled and new_cost + forward_best[edge.u] < best_total:
+                if edge.u in forward_best and new_cost + forward_best[edge.u] < best_total:
                     best_total = new_cost + forward_best[edge.u]
                     meeting_node = edge.u
 
     if meeting_node is None:
-        return _result(graph, [], False, expanded, started, forward_trace, backward_trace, None, ch_index)
+        return _result(graph, [], False, expanded, started, forward_trace, backward_trace, None)
 
     path = _reconstruct_path(start, meeting_node, forward_parent, backward_parent, ch_index)
-    return _result(graph, path, True, expanded, started, forward_trace, backward_trace, meeting_node, ch_index)
+    return _result(graph, path, True, expanded, started, forward_trace, backward_trace, meeting_node)
 
 
 def _frontiers_cannot_improve(
@@ -191,7 +191,6 @@ def _result(
     forward_trace: list[str],
     backward_trace: list[str],
     meeting_node: str | None,
-    ch_index: CHIndex,
 ) -> SearchResult:
     if path_found:
         distance_km, drive_time_min = path_metrics(graph, path)

@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from backend.schemas import RecommendationRequest, SearchTrace
 from ch_index import CHEdge, CHIndex
 from ch_preprocess import build_ch_index
-from ch_search import ch_bidirectional_dijkstra_search
+from ch_search import _frontiers_cannot_improve, ch_bidirectional_dijkstra_search
 from graph_loader import _StartAccessGraph
 from search_algorithms import SearchContext, astar_search, bfs_search, bidirectional_bfs_search, run_search, ucs_search
 
@@ -148,21 +148,25 @@ def test_single_frontier_algorithms_return_single_trace(search) -> None:
     assert result.search_trace.meeting_node is None
 
 
-def test_search_trace_schema_normalizes_single_trace_layers() -> None:
-    trace = SearchTrace.model_validate(
-        {
-            "kind": "single",
-            "layers": [
-                {"role": "forward", "coordinates": [(1.0, 2.0)]},
-                {"role": "single", "coordinates": [(3.0, 4.0)]},
-            ],
-            "meeting_node_coordinate": (5.0, 6.0),
-        }
-    )
+def test_search_trace_schema_rejects_non_single_layer_for_single_trace() -> None:
+    with pytest.raises(ValidationError):
+        SearchTrace.model_validate(
+            {
+                "kind": "single",
+                "layers": [{"role": "forward", "coordinates": [(1.0, 2.0)]}],
+            }
+        )
 
-    assert [layer.role for layer in trace.layers] == ["single"]
-    assert trace.layers[0].coordinates == [(3.0, 4.0)]
-    assert trace.meeting_node_coordinate is None
+
+def test_search_trace_schema_rejects_meeting_node_for_single_trace() -> None:
+    with pytest.raises(ValidationError):
+        SearchTrace.model_validate(
+            {
+                "kind": "single",
+                "layers": [{"role": "single", "coordinates": [(1.0, 2.0)]}],
+                "meeting_node_coordinate": (3.0, 4.0),
+            }
+        )
 
 
 def test_search_trace_schema_requires_bidirectional_layers() -> None:
@@ -215,6 +219,13 @@ def test_run_search_alt_astar_uses_landmark_heuristic() -> None:
     assert landmark.calls > 0
 
 
+def test_run_search_alt_astar_requires_landmark_heuristic() -> None:
+    graph = _graph([("A", "B"), ("B", "C")])
+
+    with pytest.raises(ValueError, match="ALT landmark table is required"):
+        run_search(graph, "A", "C", "alt_astar", SearchContext())
+
+
 def test_ch_dijkstra_matches_ucs_cost_on_directed_graph() -> None:
     graph = _weighted_graph(
         [
@@ -237,6 +248,56 @@ def test_ch_dijkstra_matches_ucs_cost_on_directed_graph() -> None:
     assert _layer_nodes(ch_result, "forward")
     assert _layer_nodes(ch_result, "backward")
     assert ch_result.search_trace.meeting_node is not None
+
+
+def test_ch_index_excludes_replaced_edges_from_query_graph() -> None:
+    graph = nx.MultiDiGraph()
+    graph.add_node("A", x=0.0, y=0.0)
+    graph.add_node("B", x=1.0, y=0.0)
+    graph.add_edge("A", "B", length=5000.0, travel_time=300.0)
+    graph.add_edge("A", "B", length=1000.0, travel_time=60.0)
+
+    index = build_ch_index(graph)
+    query_edge_ids = {edge_id for edges in index.upward.values() for edge_id in edges}
+    query_edge_ids.update(edge_id for edges in index.reverse_upward.values() for edge_id in edges)
+    query_edges = [index.edge(edge_id) for edge_id in query_edge_ids]
+
+    assert len(query_edges) == 1
+    assert query_edges[0].u == "A"
+    assert query_edges[0].v == "B"
+    assert query_edges[0].weight_min == pytest.approx(1.0)
+
+
+def test_ch_frontier_stop_waits_until_each_settled_frontier_cannot_improve() -> None:
+    assert _frontiers_cannot_improve([(10.0, "F")], [(12.0, "B")], 10.0)
+    assert not _frontiers_cannot_improve([(4.0, "F")], [(12.0, "B")], 10.0)
+
+
+def test_ch_dijkstra_updates_best_from_unsettled_opposite_frontier() -> None:
+    graph = _weighted_graph(
+        [
+            ("S", "X", 5.0),
+            ("X", "T", 5.0),
+            ("S", "M", 6.0),
+            ("M", "T", 3.0),
+        ]
+    )
+    index = CHIndex(
+        ranks={"S": 0, "T": 1, "X": 2, "M": 3},
+        upward={"S": [0, 1]},
+        reverse_upward={"T": [2, 3]},
+        edges={
+            0: CHEdge(0, "S", "X", 5.0, 5000.0),
+            1: CHEdge(1, "S", "M", 6.0, 6000.0),
+            2: CHEdge(2, "X", "T", 5.0, 5000.0),
+            3: CHEdge(3, "M", "T", 3.0, 3000.0),
+        },
+    )
+
+    result = ch_bidirectional_dijkstra_search(graph, "S", "T", index)
+
+    assert result.path == ["S", "M", "T"]
+    assert result.drive_time_min == pytest.approx(9.0)
 
 
 def test_ch_shortcut_unpacks_to_original_nodes() -> None:

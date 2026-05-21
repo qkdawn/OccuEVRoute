@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from pydantic import ValidationError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ROUTE_PLANNING_DIR = PROJECT_ROOT / "src" / "route_planning"
@@ -43,8 +42,11 @@ def get_station_poi_features() -> pd.DataFrame:
 
 
 @lru_cache(maxsize=1)
-def get_landmark_heuristic() -> LandmarkHeuristic | None:
-    return LandmarkHeuristic.load()
+def get_landmark_heuristic() -> LandmarkHeuristic:
+    landmark_heuristic = LandmarkHeuristic.load()
+    if landmark_heuristic is None:
+        raise ValueError("ALT landmark table is required. Run src/data_processing/build_landmark_distances.py.")
+    return landmark_heuristic
 
 
 @lru_cache(maxsize=1)
@@ -61,6 +63,7 @@ def warmup_data() -> None:
     get_stations()
     get_station_poi_features()
     get_landmark_heuristic()
+    get_ch_index()
 
 
 def recommend(request: RecommendationRequest) -> RecommendationResponse:
@@ -121,7 +124,7 @@ def _row_to_item(row: pd.Series) -> RecommendationItem:
         start_snap_distance_m=_optional_float(row.get("start_snap_distance_m")),
         route_coordinates=[
             (_required_float(point[0]), _required_float(point[1]))
-            for point in _safe_list(row.get("route_coordinates"))
+            for point in row.get("route_coordinates")
         ],
         search_trace=_row_search_trace(row.get("search_trace")),
         distance_km=_optional_float(row.get("distance_km")),
@@ -140,17 +143,8 @@ def _row_to_item(row: pd.Series) -> RecommendationItem:
     )
 
 
-def _safe_list(value: Any) -> list:
-    return value if isinstance(value, list) else []
-
-
 def _row_search_trace(value: Any) -> SearchTrace:
-    if not isinstance(value, dict):
-        return SearchTrace(kind="single", layers=[{"role": "single", "coordinates": []}])
-    try:
-        return SearchTrace.model_validate(value)
-    except ValidationError:
-        return SearchTrace(kind="single", layers=[{"role": "single", "coordinates": []}])
+    return SearchTrace.model_validate(value)
 
 
 def _optional_float(value: Any) -> float | None:

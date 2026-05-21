@@ -86,7 +86,7 @@ def compute_landmark_distances(
     graph: nx.DiGraph,
     landmarks: list[str],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    nodes = np.array(list(graph.nodes), dtype=object)
+    nodes = np.array([str(node) for node in graph.nodes], dtype=np.str_)
     node_index = {node: index for index, node in enumerate(nodes)}
     forward_distances = np.full((len(landmarks), len(nodes)), np.inf, dtype=np.float32)
     reverse_distances = np.full((len(landmarks), len(nodes)), np.inf, dtype=np.float32)
@@ -135,7 +135,7 @@ def main() -> None:
     np.savez_compressed(
         args.output,
         nodes=nodes,
-        landmarks=np.array(landmarks, dtype=object),
+        landmarks=np.array(landmarks, dtype=np.str_),
         forward_distances=forward_distances,
         reverse_distances=reverse_distances,
         undirected_distances=undirected_distances,

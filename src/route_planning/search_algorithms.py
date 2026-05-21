@@ -49,6 +49,11 @@ class SearchContext:
     landmark_heuristic: LandmarkHeuristic | None = None
     ch_index: object | None = None
 
+    def require_landmark_heuristic(self) -> LandmarkHeuristic:
+        if self.landmark_heuristic is None:
+            raise ValueError("ALT landmark table is required for alt_astar.")
+        return self.landmark_heuristic
+
     def require_ch_index(self):
         if self.ch_index is None:
             raise ValueError("CH index is required for ch_bidirectional_dijkstra.")
@@ -355,7 +360,7 @@ def alt_astar_search(
     graph,
     start: str,
     goal: str,
-    landmark_heuristic: LandmarkHeuristic | None = None,
+    landmark_heuristic: LandmarkHeuristic,
 ) -> SearchResult:
     return astar_search(graph, start, goal, landmark_heuristic, algorithm="alt_astar")
 
@@ -378,7 +383,7 @@ def run_search(
     if algorithm == "astar":
         return astar_search(graph, start, goal)
     if algorithm == "alt_astar":
-        return alt_astar_search(graph, start, goal, context.landmark_heuristic)
+        return alt_astar_search(graph, start, goal, context.require_landmark_heuristic())
     if algorithm == "ch_bidirectional_dijkstra":
         from ch_search import ch_bidirectional_dijkstra_search
 

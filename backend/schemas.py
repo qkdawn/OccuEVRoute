@@ -40,19 +40,17 @@ class SearchTrace(BaseModel):
     meeting_node_coordinate: tuple[float, float] | None = None
 
     @model_validator(mode="after")
-    def normalize_layers(self) -> "SearchTrace":
+    def validate_layers(self) -> "SearchTrace":
         if self.kind == "single":
-            single_layers = [layer for layer in self.layers if layer.role == "single"]
-            self.layers = single_layers or [SearchTraceLayer(role="single", coordinates=[])]
-            self.meeting_node_coordinate = None
+            if len(self.layers) != 1 or self.layers[0].role != "single":
+                raise ValueError("single search trace must contain exactly one single layer")
+            if self.meeting_node_coordinate is not None:
+                raise ValueError("single search trace cannot include a meeting node")
             return self
 
-        layers_by_role = {layer.role: layer for layer in self.layers if layer.role in {"forward", "backward"}}
-        missing_roles = {"forward", "backward"} - set(layers_by_role)
-        if missing_roles:
-            missing = ", ".join(sorted(missing_roles))
-            raise ValueError(f"bidirectional search trace is missing {missing} layer")
-        self.layers = [layers_by_role["forward"], layers_by_role["backward"]]
+        roles = [layer.role for layer in self.layers]
+        if roles != ["forward", "backward"]:
+            raise ValueError("bidirectional search trace must contain forward and backward layers in order")
         return self
 
 

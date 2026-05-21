@@ -30,7 +30,7 @@ class LandmarkHeuristic:
     def load(cls, path: Path = DEFAULT_LANDMARK_FILE) -> "LandmarkHeuristic | None":
         if not path.exists():
             return None
-        data = np.load(path, allow_pickle=True)
+        data = np.load(path, allow_pickle=False)
         if "forward_distances" in data and "reverse_distances" in data:
             undirected_distances = data["undirected_distances"] if "undirected_distances" in data else None
             return cls(
