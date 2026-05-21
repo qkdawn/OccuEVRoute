@@ -8,6 +8,7 @@ from dataclasses import asdict
 import pandas as pd
 
 from candidate_selector import select_nearby_stations
+from ch_index import CHIndex
 from constraints import UserConstraints, post_csp_check, pre_csp_check
 from graph_loader import build_graph_with_start_access, load_road_graph, load_station_access
 from landmark_heuristic import LandmarkHeuristic
@@ -23,6 +24,7 @@ def recommend_charging_stations(
     graph=None,
     stations: pd.DataFrame | None = None,
     landmark_heuristic: LandmarkHeuristic | None = None,
+    ch_index: CHIndex | None = None,
 ) -> pd.DataFrame:
     """Recommend top charging stations using search + CSP checks."""
     constraints = constraints or UserConstraints()
@@ -55,7 +57,7 @@ def recommend_charging_stations(
             continue
 
         access_node = str(station["access_node"])
-        search = run_search(search_graph, start_node, access_node, algorithm, landmark_heuristic)
+        search = run_search(search_graph, start_node, access_node, algorithm, landmark_heuristic, ch_index)
         post_ok, post_reason, arrival_soc = post_csp_check(
             search.path_found,
             search.distance_km,
@@ -215,7 +217,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Recommend charging stations from a location.")
     parser.add_argument("--lat", type=float, required=True)
     parser.add_argument("--lon", type=float, required=True)
-    parser.add_argument("--algorithm", choices=["bfs", "bidirectional_bfs", "ucs", "astar", "alt_astar"], default="astar")
+    parser.add_argument(
+        "--algorithm",
+        choices=["bfs", "bidirectional_bfs", "ucs", "astar", "alt_astar", "ch_bidirectional_dijkstra"],
+        default="astar",
+    )
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--max-candidates", type=int, default=20)
     parser.add_argument("--max-search-radius-km", type=float, default=10.0)
@@ -246,6 +252,7 @@ def main() -> None:
         algorithm=args.algorithm,
         constraints=user_constraints,
         top_k=args.top_k,
+        ch_index=CHIndex.load() if args.algorithm == "ch_bidirectional_dijkstra" else None,
     )
     print("constraints:", asdict(user_constraints))
     if result.empty:

@@ -1,4 +1,4 @@
-export type Algorithm = "bfs" | "bidirectional_bfs" | "ucs" | "astar" | "alt_astar";
+export type Algorithm = "bfs" | "bidirectional_bfs" | "ucs" | "astar" | "alt_astar" | "ch_bidirectional_dijkstra";
 export type Basemap = "gaode" | "carto" | "osm";
 
 export interface LayerVisibility {

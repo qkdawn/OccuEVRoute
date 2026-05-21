@@ -16,6 +16,7 @@ ROUTE_PLANNING_DIR = PROJECT_ROOT / "src" / "route_planning"
 if str(ROUTE_PLANNING_DIR) not in sys.path:
     sys.path.insert(0, str(ROUTE_PLANNING_DIR))
 
+from ch_index import CHIndex
 from constraints import UserConstraints
 from graph_loader import load_road_graph, load_station_access, nearest_road_edge_snap
 from landmark_heuristic import LandmarkHeuristic
@@ -43,6 +44,14 @@ def get_station_poi_features() -> pd.DataFrame:
 @lru_cache(maxsize=1)
 def get_landmark_heuristic() -> LandmarkHeuristic | None:
     return LandmarkHeuristic.load()
+
+
+@lru_cache(maxsize=1)
+def get_ch_index() -> CHIndex:
+    try:
+        return CHIndex.load()
+    except FileNotFoundError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def warmup_data() -> None:
@@ -77,6 +86,7 @@ def recommend(request: RecommendationRequest) -> RecommendationResponse:
         graph=get_graph(),
         stations=get_stations(),
         landmark_heuristic=get_landmark_heuristic(),
+        ch_index=get_ch_index() if request.algorithm == "ch_bidirectional_dijkstra" else None,
     )
     results = _merge_poi_features(results)
     return RecommendationResponse(

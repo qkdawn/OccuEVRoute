@@ -382,6 +382,7 @@ def run_search(
     goal: str,
     algorithm: str,
     landmark_heuristic: LandmarkHeuristic | None = None,
+    ch_index=None,
 ) -> SearchResult:
     algorithm = algorithm.lower()
     if algorithm == "bfs":
@@ -394,4 +395,10 @@ def run_search(
         return astar_search(graph, start, goal)
     if algorithm == "alt_astar":
         return alt_astar_search(graph, start, goal, landmark_heuristic)
+    if algorithm == "ch_bidirectional_dijkstra":
+        if ch_index is None:
+            raise ValueError("CH index is required for ch_bidirectional_dijkstra.")
+        from ch_search import ch_bidirectional_dijkstra_search
+
+        return ch_bidirectional_dijkstra_search(graph, start, goal, ch_index)
     raise ValueError(f"Unsupported algorithm: {algorithm}")

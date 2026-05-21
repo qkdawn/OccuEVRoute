@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-Algorithm = Literal["bfs", "bidirectional_bfs", "ucs", "astar", "alt_astar"]
+Algorithm = Literal["bfs", "bidirectional_bfs", "ucs", "astar", "alt_astar", "ch_bidirectional_dijkstra"]
 SearchTraceKind = Literal["single", "bidirectional"]
 SearchTraceRole = Literal["single", "forward", "backward"]
 

@@ -85,6 +85,7 @@ const ALGORITHM_LABELS: Record<Algorithm, string> = {
   ucs: "UCS: Travel-time baseline",
   astar: "A*: Straight-line heuristic",
   alt_astar: "ALT A*: Landmark heuristic",
+  ch_bidirectional_dijkstra: "CH Dijkstra: Contracted bidirectional query",
 };
 
 const LAYER_LABELS: Array<[keyof LayerVisibility, string, string]> = [
@@ -720,6 +721,7 @@ function playbackDescription(kind: SearchTraceKind) {
 function algorithmShortLabel(algorithm: Algorithm) {
   if (algorithm === "bidirectional_bfs") return "Bidirectional BFS";
   if (algorithm === "alt_astar") return "ALT A*";
+  if (algorithm === "ch_bidirectional_dijkstra") return "CH Dijkstra";
   if (algorithm === "astar") return "A*";
   return algorithm.toUpperCase();
 }
