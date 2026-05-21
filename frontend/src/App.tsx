@@ -82,10 +82,10 @@ const BASEMAP_LABELS: Record<Basemap, string> = {
 const ALGORITHM_LABELS: Record<Algorithm, string> = {
   bfs: "BFS: Unweighted baseline",
   bidirectional_bfs: "Bidirectional BFS: Two-frontier search",
+  ch_bidirectional_dijkstra: "CH Dijkstra: Contracted bidirectional query",
   ucs: "UCS: Travel-time baseline",
   astar: "A*: Straight-line heuristic",
   alt_astar: "ALT A*: Landmark heuristic",
-  ch_bidirectional_dijkstra: "CH Dijkstra: Contracted bidirectional query",
 };
 
 const LAYER_LABELS: Array<[keyof LayerVisibility, string, string]> = [
