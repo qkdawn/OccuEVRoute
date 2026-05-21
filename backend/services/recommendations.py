@@ -21,6 +21,7 @@ from constraints import UserConstraints
 from graph_loader import load_road_graph, load_station_access, nearest_road_edge_snap
 from landmark_heuristic import LandmarkHeuristic
 from recommender import recommend_charging_stations
+from search_algorithms import SearchContext
 
 from backend.schemas import RecommendationItem, RecommendationRequest, RecommendationResponse, SearchTrace
 from backend.services.geo_data import contains_shenzhen, load_station_poi_features
@@ -85,8 +86,10 @@ def recommend(request: RecommendationRequest) -> RecommendationResponse:
         top_k=request.top_k,
         graph=get_graph(),
         stations=get_stations(),
-        landmark_heuristic=get_landmark_heuristic(),
-        ch_index=get_ch_index() if request.algorithm == "ch_bidirectional_dijkstra" else None,
+        search_context=SearchContext(
+            landmark_heuristic=get_landmark_heuristic(),
+            ch_index=get_ch_index() if request.algorithm == "ch_bidirectional_dijkstra" else None,
+        ),
     )
     results = _merge_poi_features(results)
     return RecommendationResponse(

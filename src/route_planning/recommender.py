@@ -13,7 +13,7 @@ from constraints import UserConstraints, post_csp_check, pre_csp_check
 from graph_metrics import best_edge_attrs
 from graph_loader import build_graph_with_start_access, load_road_graph, load_station_access
 from landmark_heuristic import LandmarkHeuristic
-from search_algorithms import SearchResult, run_search
+from search_algorithms import SearchContext, SearchResult, run_search
 
 
 def recommend_charging_stations(
@@ -26,11 +26,13 @@ def recommend_charging_stations(
     stations: pd.DataFrame | None = None,
     landmark_heuristic: LandmarkHeuristic | None = None,
     ch_index: CHIndex | None = None,
+    search_context: SearchContext | None = None,
 ) -> pd.DataFrame:
     """Recommend top charging stations using search + CSP checks."""
     constraints = constraints or UserConstraints()
     graph = graph if graph is not None else load_road_graph()
     stations = stations if stations is not None else load_station_access()
+    search_context = search_context or SearchContext(landmark_heuristic=landmark_heuristic, ch_index=ch_index)
     search_graph, start_node, start_snap = build_graph_with_start_access(graph, user_latitude, user_longitude)
     start_node_latitude = float(start_snap["latitude"])
     start_node_longitude = float(start_snap["longitude"])
@@ -58,7 +60,7 @@ def recommend_charging_stations(
             continue
 
         access_node = str(station["access_node"])
-        search = run_search(search_graph, start_node, access_node, algorithm, landmark_heuristic, ch_index)
+        search = run_search(search_graph, start_node, access_node, algorithm, search_context)
         post_ok, post_reason, arrival_soc = post_csp_check(
             search.path_found,
             search.distance_km,

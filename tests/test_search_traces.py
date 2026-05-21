@@ -19,7 +19,7 @@ from ch_index import CHEdge, CHIndex
 from ch_preprocess import build_ch_index
 from ch_search import ch_bidirectional_dijkstra_search
 from graph_loader import _StartAccessGraph
-from search_algorithms import astar_search, bfs_search, bidirectional_bfs_search, run_search, ucs_search
+from search_algorithms import SearchContext, astar_search, bfs_search, bidirectional_bfs_search, run_search, ucs_search
 
 
 def _graph(edges: list[tuple[str, str]]) -> nx.MultiDiGraph:
@@ -198,7 +198,7 @@ class _CountingLandmark:
 def test_run_search_astar_ignores_landmark_heuristic() -> None:
     graph = _graph([("A", "B"), ("B", "C")])
 
-    result = run_search(graph, "A", "C", "astar", _ExplodingLandmark())
+    result = run_search(graph, "A", "C", "astar", SearchContext(landmark_heuristic=_ExplodingLandmark()))
 
     assert result.algorithm == "astar"
     assert result.path == ["A", "B", "C"]
@@ -208,7 +208,7 @@ def test_run_search_alt_astar_uses_landmark_heuristic() -> None:
     graph = _graph([("A", "B"), ("B", "C")])
     landmark = _CountingLandmark()
 
-    result = run_search(graph, "A", "C", "alt_astar", landmark)
+    result = run_search(graph, "A", "C", "alt_astar", SearchContext(landmark_heuristic=landmark))
 
     assert result.algorithm == "alt_astar"
     assert result.path == ["A", "B", "C"]
@@ -313,7 +313,7 @@ def test_run_search_dispatches_ch_dijkstra() -> None:
     graph = _weighted_graph([("A", "B", 1.0), ("B", "C", 1.0)])
     index = build_ch_index(graph)
 
-    result = run_search(graph, "A", "C", "ch_bidirectional_dijkstra", ch_index=index)
+    result = run_search(graph, "A", "C", "ch_bidirectional_dijkstra", SearchContext(ch_index=index))
 
     assert result.algorithm == "ch_bidirectional_dijkstra"
     assert result.path_found

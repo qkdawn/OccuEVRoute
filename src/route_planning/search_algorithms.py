@@ -44,6 +44,17 @@ class SearchResult:
     search_trace: SearchTrace
 
 
+@dataclass(frozen=True)
+class SearchContext:
+    landmark_heuristic: LandmarkHeuristic | None = None
+    ch_index: object | None = None
+
+    def require_ch_index(self):
+        if self.ch_index is None:
+            raise ValueError("CH index is required for ch_bidirectional_dijkstra.")
+        return self.ch_index
+
+
 def _node_xy(graph, node: str) -> tuple[float, float]:
     data = graph.nodes[node]
     return float(data["x"]), float(data["y"])
@@ -354,9 +365,9 @@ def run_search(
     start: str,
     goal: str,
     algorithm: str,
-    landmark_heuristic: LandmarkHeuristic | None = None,
-    ch_index=None,
+    context: SearchContext | None = None,
 ) -> SearchResult:
+    context = context or SearchContext()
     algorithm = algorithm.lower()
     if algorithm == "bfs":
         return bfs_search(graph, start, goal)
@@ -367,11 +378,9 @@ def run_search(
     if algorithm == "astar":
         return astar_search(graph, start, goal)
     if algorithm == "alt_astar":
-        return alt_astar_search(graph, start, goal, landmark_heuristic)
+        return alt_astar_search(graph, start, goal, context.landmark_heuristic)
     if algorithm == "ch_bidirectional_dijkstra":
-        if ch_index is None:
-            raise ValueError("CH index is required for ch_bidirectional_dijkstra.")
         from ch_search import ch_bidirectional_dijkstra_search
 
-        return ch_bidirectional_dijkstra_search(graph, start, goal, ch_index)
+        return ch_bidirectional_dijkstra_search(graph, start, goal, context.require_ch_index())
     raise ValueError(f"Unsupported algorithm: {algorithm}")
