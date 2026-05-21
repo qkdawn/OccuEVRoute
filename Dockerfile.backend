@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir --timeout 120 --retries 5 \
 
 COPY backend ./backend
 COPY src ./src
-COPY data ./data
 
 EXPOSE 8000
 

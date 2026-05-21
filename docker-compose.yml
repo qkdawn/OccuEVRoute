@@ -6,6 +6,8 @@ services:
     image: occuevroute-backend
     ports:
       - "9000:8000"
+    volumes:
+      - ./data:/app/data:ro
 
   frontend:
     build:
