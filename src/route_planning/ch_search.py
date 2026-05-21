@@ -37,8 +37,6 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
     while forward_heap or backward_heap:
         forward_min = forward_heap[0][0] if forward_heap else float("inf")
         backward_min = backward_heap[0][0] if backward_heap else float("inf")
-        if forward_min + backward_min >= best_total:
-            break
 
         if forward_min <= backward_min:
             cost, node = heapq.heappop(forward_heap)

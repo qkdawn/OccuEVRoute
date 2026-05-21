@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import heapq
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,7 +14,8 @@ from graph_loader import DEFAULT_GRAPH_FILE, _restore_graphml_edge_types
 from search_algorithms import DEFAULT_HEURISTIC_SPEED_KPH
 
 
-MAX_SHORTCUT_PAIRS_PER_NODE = 48
+DEFAULT_WITNESS_SETTLED_LIMIT = 240
+DEFAULT_PROGRESS_INTERVAL = 5000
 
 
 @dataclass(frozen=True)
@@ -23,22 +25,54 @@ class WeightedEdge:
 
 
 class CHBuilder:
-    def __init__(self, graph):
-        self.ranks = compute_node_ranks(graph)
+    def __init__(
+        self,
+        graph,
+        witness_settled_limit: int = DEFAULT_WITNESS_SETTLED_LIMIT,
+        progress_interval: int = DEFAULT_PROGRESS_INTERVAL,
+    ):
+        self.graph = graph
+        self.ranks: dict[str, int] = {}
+        self.uncontracted = {str(node) for node in graph.nodes}
         self.edges: dict[int, CHEdge] = {}
         self.adjacency: dict[str, dict[str, WeightedEdge]] = {str(node): {} for node in graph.nodes}
         self.reverse: dict[str, dict[str, WeightedEdge]] = {str(node): {} for node in graph.nodes}
         self.next_edge_id = 0
+        self.witness_settled_limit = witness_settled_limit
+        self.progress_interval = progress_interval
         self._load_base_edges(graph)
 
     def build(self) -> CHIndex:
-        for node, rank in sorted(self.ranks.items(), key=lambda item: item[1]):
-            self._contract_node(node, rank)
+        total_nodes = len(self.uncontracted)
+        heap = [(self._importance(node), self._tie_breaker(node), node) for node in self.uncontracted]
+        heapq.heapify(heap)
+        while self.uncontracted:
+            importance, _, node = heapq.heappop(heap)
+            if node not in self.uncontracted:
+                continue
+            current_importance = self._importance(node)
+            if current_importance > importance and heap and current_importance > heap[0][0]:
+                heapq.heappush(heap, (current_importance, self._tie_breaker(node), node))
+                continue
+            rank = len(self.ranks)
+            self.ranks[node] = rank
+            self._contract_node(node)
+            self.uncontracted.remove(node)
+            index = len(self.ranks)
+            if self.progress_interval and index % self.progress_interval == 0:
+                shortcut_count = sum(1 for edge in self.edges.values() if edge.is_shortcut)
+                print(
+                    f"contracted {index:,}/{total_nodes:,} nodes, "
+                    f"edges={len(self.edges):,}, shortcuts={shortcut_count:,}",
+                    flush=True,
+                )
         upward: dict[str, list[int]] = {}
         reverse_upward: dict[str, list[int]] = {}
         for edge in self.edges.values():
-            upward.setdefault(edge.u, []).append(edge.id)
-            reverse_upward.setdefault(edge.v, []).append(edge.id)
+            if self.ranks[edge.u] < self.ranks[edge.v]:
+                upward.setdefault(edge.u, []).append(edge.id)
+            elif self.ranks[edge.u] > self.ranks[edge.v]:
+                reverse_upward.setdefault(edge.v, []).append(edge.id)
         return CHIndex(
             ranks=self.ranks,
             upward={node: sorted(edges, key=lambda edge_id: self.edges[edge_id].v) for node, edges in upward.items()},
@@ -56,26 +90,23 @@ class CHBuilder:
             length_m = _edge_length_m(attrs)
             self._add_or_replace_edge(u, v, weight_min, length_m)
 
-    def _contract_node(self, node: str, rank: int) -> None:
+    def _contract_node(self, node: str) -> None:
         incoming = [
             (u, edge)
             for u, edge in list(self.reverse.get(node, {}).items())
-            if self.ranks[u] > rank
+            if u in self.uncontracted and u != node
         ]
         outgoing = [
             (w, edge)
             for w, edge in list(self.adjacency.get(node, {}).items())
-            if self.ranks[w] > rank
+            if w in self.uncontracted and w != node
         ]
-        if len(incoming) * len(outgoing) > MAX_SHORTCUT_PAIRS_PER_NODE:
-            return
         for u, in_edge in incoming:
             for w, out_edge in outgoing:
                 if u == w:
                     continue
                 shortcut_weight = in_edge.weight_min + out_edge.weight_min
-                current = self.adjacency.get(u, {}).get(w)
-                if current is not None and current.weight_min <= shortcut_weight:
+                if self._has_witness_path(u, w, node, shortcut_weight):
                     continue
                 in_full = self.edges[in_edge.edge_id]
                 out_full = self.edges[out_edge.edge_id]
@@ -88,6 +119,38 @@ class CHBuilder:
                     left_edge_id=in_edge.edge_id,
                     right_edge_id=out_edge.edge_id,
                 )
+
+    def _has_witness_path(self, start: str, goal: str, forbidden: str, max_cost: float) -> bool:
+        heap = [(0.0, start)]
+        best = {start: 0.0}
+        settled = 0
+        while heap and settled < self.witness_settled_limit:
+            cost, node = heapq.heappop(heap)
+            if cost > best.get(node, float("inf")):
+                continue
+            if cost > max_cost:
+                return False
+            if node == goal:
+                return True
+            settled += 1
+            for neighbor, edge in self.adjacency.get(node, {}).items():
+                if neighbor == forbidden or neighbor not in self.uncontracted:
+                    continue
+                new_cost = cost + edge.weight_min
+                if new_cost <= max_cost and new_cost < best.get(neighbor, float("inf")):
+                    best[neighbor] = new_cost
+                    heapq.heappush(heap, (new_cost, neighbor))
+        return False
+
+    def _importance(self, node: str) -> tuple[int, int, int]:
+        incoming = sum(1 for predecessor in self.reverse.get(node, {}) if predecessor in self.uncontracted)
+        outgoing = sum(1 for successor in self.adjacency.get(node, {}) if successor in self.uncontracted)
+        shortcut_upper_bound = incoming * outgoing
+        edge_difference = shortcut_upper_bound - incoming - outgoing
+        return edge_difference, shortcut_upper_bound, incoming + outgoing
+
+    def _tie_breaker(self, node: str) -> tuple[float, float, str]:
+        return _node_coordinate(self.graph, node, "x"), _node_coordinate(self.graph, node, "y"), node
 
     def _add_or_replace_edge(
         self,
@@ -111,8 +174,12 @@ class CHBuilder:
         return edge_id
 
 
-def build_ch_index(graph) -> CHIndex:
-    return CHBuilder(graph).build()
+def build_ch_index(
+    graph,
+    witness_settled_limit: int = DEFAULT_WITNESS_SETTLED_LIMIT,
+    progress_interval: int = 0,
+) -> CHIndex:
+    return CHBuilder(graph, witness_settled_limit, progress_interval).build()
 
 
 def compute_node_ranks(graph) -> dict[str, int]:
@@ -156,6 +223,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build a contraction hierarchy index for route planning.")
     parser.add_argument("--graph", type=Path, default=DEFAULT_GRAPH_FILE)
     parser.add_argument("--output", type=Path, default=DEFAULT_CH_INDEX_FILE)
+    parser.add_argument("--witness-settled-limit", type=int, default=DEFAULT_WITNESS_SETTLED_LIMIT)
+    parser.add_argument("--progress-interval", type=int, default=DEFAULT_PROGRESS_INTERVAL)
     return parser.parse_args()
 
 
@@ -163,7 +232,7 @@ def main() -> None:
     args = parse_args()
     graph = nx.read_graphml(args.graph, force_multigraph=True)
     _restore_graphml_edge_types(graph)
-    index = build_ch_index(graph)
+    index = build_ch_index(graph, args.witness_settled_limit, args.progress_interval)
     index.save(args.output)
     shortcut_count = sum(1 for edge in index.edges.values() if edge.is_shortcut)
     print(f"Saved CH index: {args.output}")
