@@ -34,18 +34,21 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
     expanded = 0
     forward_trace: list[str] = []
     backward_trace: list[str] = []
+    forward_settled: set[str] = set()
+    backward_settled: set[str] = set()
 
     while forward_heap or backward_heap:
-        forward_min = forward_heap[0][0] if forward_heap else float("inf")
-        backward_min = backward_heap[0][0] if backward_heap else float("inf")
+        if _frontiers_cannot_improve(forward_heap, backward_heap, best_total):
+            break
 
-        if forward_min <= backward_min:
+        if _heap_min(forward_heap) <= _heap_min(backward_heap):
             cost, node = heapq.heappop(forward_heap)
-            if cost > forward_best.get(node, float("inf")):
+            if cost > forward_best.get(node, float("inf")) or node in forward_settled:
                 continue
+            forward_settled.add(node)
             expanded += 1
             forward_trace.append(node)
-            if node in backward_best and cost + backward_best[node] < best_total:
+            if node in backward_settled and cost + backward_best[node] < best_total:
                 best_total = cost + backward_best[node]
                 meeting_node = node
             for edge_id in ch_index.upward.get(node, []):
@@ -55,13 +58,17 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                     forward_best[edge.v] = new_cost
                     forward_parent[edge.v] = (node, edge_id)
                     heapq.heappush(forward_heap, (new_cost, edge.v))
+                if edge.v in backward_settled and new_cost + backward_best[edge.v] < best_total:
+                    best_total = new_cost + backward_best[edge.v]
+                    meeting_node = edge.v
         else:
             cost, node = heapq.heappop(backward_heap)
-            if cost > backward_best.get(node, float("inf")):
+            if cost > backward_best.get(node, float("inf")) or node in backward_settled:
                 continue
+            backward_settled.add(node)
             expanded += 1
             backward_trace.append(node)
-            if node in forward_best and cost + forward_best[node] < best_total:
+            if node in forward_settled and cost + forward_best[node] < best_total:
                 best_total = cost + forward_best[node]
                 meeting_node = node
             for edge_id in ch_index.reverse_upward.get(node, []):
@@ -71,12 +78,29 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                     backward_best[edge.u] = new_cost
                     backward_parent[edge.u] = (node, edge_id)
                     heapq.heappush(backward_heap, (new_cost, edge.u))
+                if edge.u in forward_settled and new_cost + forward_best[edge.u] < best_total:
+                    best_total = new_cost + forward_best[edge.u]
+                    meeting_node = edge.u
 
     if meeting_node is None:
         return _result(graph, [], False, expanded, started, forward_trace, backward_trace, None, ch_index)
 
     path = _reconstruct_path(start, meeting_node, forward_parent, backward_parent, ch_index)
     return _result(graph, path, True, expanded, started, forward_trace, backward_trace, meeting_node, ch_index)
+
+
+def _frontiers_cannot_improve(
+    forward_heap: list[tuple[float, str]],
+    backward_heap: list[tuple[float, str]],
+    best_total: float,
+) -> bool:
+    if best_total == float("inf"):
+        return False
+    return _heap_min(forward_heap) >= best_total and _heap_min(backward_heap) >= best_total
+
+
+def _heap_min(heap: list[tuple[float, str]]) -> float:
+    return heap[0][0] if heap else float("inf")
 
 
 def _seed_forward_frontier(
@@ -191,4 +215,3 @@ def _result(
             meeting_node=meeting_node,
         ),
     )
-
