@@ -142,3 +142,19 @@ The current multi-horizon occupancy model is documented in
 arbitrary future offsets within 0-120 minutes using XGBoost, lagged occupancy
 features, time/weather/price context, POI features, and station-neighbor
 profiles.
+
+## 怎么跑
+
+开两个powershell
+```
+前端窗口
+cd E:\occuEVRoute\OccuEVRoute-main\frontend
+$env:PATH = 'E:\occuEVRoute\OccuEVRoute-main\.tools\node-v22.21.1-win-x64;' + $env:PATH
+& 'E:\occuEVRoute\OccuEVRoute-main\.tools\node-v22.21.1-win-x64\npm.cmd' run dev -- --host 127.0.0.1 --port 5173
+```
+```
+后端窗口
+ cd E:\occuEVRoute\OccuEVRoute-main
+ .\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 9000
+```
+路径是你的路径，最后在浏览器打开http://127.0.0.1:5173/
