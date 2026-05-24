@@ -16,10 +16,10 @@
 → 数据来源与处理
 → 路网搜索与约束过滤
 → 占用率机器学习预测
-→ 系统性能、结果与局限
+→ 搜索结果、ML 结果、复杂度与局限
 ```
 
-写作时要把项目讲成一个完整系统，而不是六个互不相关的模块。Search Strategy 解释“怎么到达”，Machine Learning 解释“到达后是否可能有空位”，Performance 解释“系统是否有效、可演示、可信”。
+写作时要把项目讲成一个完整系统，而不是六个互不相关的模块。Search Strategy 解释“怎么到达”，Machine Learning 解释“到达时可能有多拥挤”，Performance 汇总 search results、ML results、complexity 和 limitations。
 
 因为 presentation 只有 10 分钟，report 只有约 1500 英文单词，所有章节都应服务主线，不要平均铺开。建议时间和篇幅分配：
 
@@ -47,7 +47,7 @@ Search Strategy 和 Machine Learning 是技术核心，可以多讲；Introducti
 | 7 | Search Strategy: UCS → A* → ALT A* |
 | 8 | Machine Learning model |
 | 9 | ML results / feature importance |
-| 10 | Performance + demo result |
+| 10 | Performance: search results + ML results + complexity |
 | 11 | Limitations / conclusion, optional if time allows |
 
 1500-word report 建议只保留 6 个一级小节，每节 1-3 段。不要把代码片段大段放进 report；代码路径可以放在句子里或附录里。
@@ -107,9 +107,8 @@ Problem Definition 要把真实问题转成可计算问题，让后面的算法�
 建议写：
 
 - EV charging route planning 的核心困难：
-  - 最近的站不一定可达。
-  - 可达的站不一定有空位。
-  - 最短距离不一定代表最短时间。
+  - 最近或最短距离的站不一定是行驶时间最优的站。
+  - 距离近的站不一定有更低的拥挤风险。
   - 城市路网搜索规模大，需要有效算法。
 - 输入变量：
   - 用户位置：latitude / longitude。
@@ -122,14 +121,14 @@ Problem Definition 要把真实问题转成可计算问题，让后面的算法�
 - 约束设计：
   - Pre-check（constraint search）：搜索前使用静态约束筛选候选站，例如直线距离、充电桩数量、道路接入距离。它的作用是缩小搜索空间，避免对明显不可行的站点运行昂贵的路网搜索。
   - Post-check（constraint validation）：搜索后基于真实路径结果验证行驶时间、电量消耗、到达 SOC。它的作用是保证最终推荐结果不仅“搜得到”，而且满足 EV 可达性和用户约束。
-  - Ranking（rule-based scoring / sorting）：对通过 post-check 的站点排序。系统默认一定会合并 ML 预测占用率，但 ranking 不是单独训练的 learning-to-rank 模型，而是用户可选择排序指标的 rule-based sorting。
+  - Ranking（multi-key sorting）：对通过 post-check 的可行站点排序。系统先合并 ML 预测占用率，再按用户选择的 ranking metric 做多字段排序；其中 occupancy 只作为拥挤风险信号，不表示等待时间。
 - CSP 在本项目中的位置：
   - CSP 不需要单独开一个大章节，建议放在 Problem Definition 里讲“什么叫可行解”，再在 Search Strategy 里讲它如何嵌入路线搜索。
-- 简单讲法是：pre-check 负责约束搜索空间，post-check 负责约束验证，ranking 是 rule-based sorting，不是单独训练的 learning-to-rank 模型。
+- 简单讲法是：pre-check 负责约束搜索空间，post-check 负责约束验证，ranking 负责把可行站点按用户当前目标排出优先级。
 - 排序目标：
-  - 默认 balanced：`ml_rank_score = drive_time_min + predicted_occupancy_rate * 10`，再用 `drive_time_min` 和 `distance_km` 打破并列。
+  - 默认 balanced：`ml_rank_score = drive_time_min + predicted_occupancy_rate * 10`，分数越低越靠前。这里 `10` 是拥挤风险权重，用来让排序在更短行驶时间和更低拥挤风险之间折中。
   - 可切换为 shortest drive time、shortest distance、lowest predicted occupancy、highest arrival SOC。
-  - 这些选项用于展示不同目标函数如何改变站点推荐顺序；ML 提供 occupancy 输入，但不负责学习排序函数。
+  - 实现上后端调用 pandas `sort_values` 做多字段排序；汇报重点讲排序键和业务含义即可。
 
 建议 PPT 图：
 
@@ -234,7 +233,7 @@ Search Strategy 要解释系统如何在真实路网上找到候选站路径，�
   - 搜索前运行 pre-check（constraint search），先过滤明显不可行站点，避免对每个站都做昂贵路网搜索。
   - 对每个候选站运行搜索算法。
   - 搜索结果进入 post-check（constraint validation），用真实路径检查 drive time、energy consumption 和 arrival SOC。
-  - 最后做 ranking（rule-based scoring / sorting）：默认按 `ml_rank_score = drive_time_min + predicted_occupancy_rate * 10` 排序，也可切换为 drive time、distance、predicted occupancy 或 arrival SOC。
+  - 最后做 ranking（multi-key sorting）：默认按 `ml_rank_score = drive_time_min + predicted_occupancy_rate * 10` 排序，也可切换为 drive time、distance、predicted occupancy 或 arrival SOC。occupancy 在这里是拥挤风险信号，不是等待时间。
 - BFS：
   - 按层扩展，适合解释基础图搜索。
   - 不考虑边权，不能保证真实行驶时间最短。
@@ -357,11 +356,11 @@ Machine Learning 要说明为什么需要预测占用率、模型预测什么、
 
 ### 这一节要回答什么
 
-Performance 要证明系统不是只有概念，而是在算法效率、预测准确性和 demo 体验上都有可验证结果。
+Performance 要把前面的方法落到结果和取舍上，说明搜索是否有效、ML 预测是否可信、算法复杂度如何影响设计，以及当前方案还有哪些限制。
 
-建议分三类写：
+建议分四类写：
 
-### 搜索性能
+### Search Results
 
 需要写：
 
@@ -384,7 +383,7 @@ Performance 要证明系统不是只有概念，而是在算法效率、预测�
 - CH shortcut 数量、index size、preprocessing time。
 - 返回 top-k 推荐的端到端耗时。
 
-### 机器学习性能
+### ML Results
 
 需要写：
 
@@ -400,26 +399,24 @@ Performance 要证明系统不是只有概念，而是在算法效率、预测�
 - 5 min R2 = 0.9790。
 - 120 min R2 = 0.8894。
 
-### 系统 / Demo 性能
+### Complexity
 
 需要写：
 
-- 前端地图能交互选择位置和参数。
-- 后端 API 返回推荐结果、路线和诊断。
-- 诊断信息能解释站点被过滤的原因，例如 energy insufficient、drive time exceeded、too few chargers。
-- 系统能支持课程答辩中的“改参数 → 重新推荐 → 解释变化”。
+- BFS / Bidirectional BFS 作为教学 baseline，说明无权搜索在真实 travel-time 权重下的局限。
+- UCS 能保证 travel-time 最短路，但在大路网上扩展范围较大。
+- A* / ALT A* 通过启发式减少扩展；ALT 的 landmark 距离表把一部分计算转移到预处理。
+- CH 双端 Dijkstra 把大量最短路加速工作放到离线 preprocessing，在线查询更快，但需要额外 index 和 shortcut unpacking。
+- 复杂度分析不用写成纯公式堆砌，要和“为什么选择这些算法、为什么要预处理”连起来。
 
-建议 PPT 图：
+### Limitations
 
-- 一张 performance summary 表。
-- 一张端到端 demo 截图。
-- 一张模型 horizon 误差图。
-- 一张算法对比图。
+需要写：
 
-避免：
-
-- 不要只放 ML 指标而忽略系统性能。
-- 不要承诺真实生产级导航性能；这是 course-demo system，应强调可解释性和集成完整度。
+- Occupancy prediction 预测的是 occupancy rate，不是 waiting time。
+- Balanced ranking 中 occupancy 只是拥挤风险信号，权重是 heuristic。
+- 搜索和推荐基于静态路网及当前数据快照，没有实时交通、实时排队或充电功率变化。
+- 当前系统是 course-demo system，重点是算法组合、可解释推荐和结果展示，不承诺生产级导航能力。
 
 ## Report 与 PPT 的关系
 
@@ -432,7 +429,7 @@ Report 可以更详细，PPT 要更像讲故事：
 | Dataset | 来源、规模、处理、切分、防泄漏 | 数据来源表 + 特征类别图 |
 | Search Strategy | 算法原理、复杂度、代码设计 | BFS→Bi-BFS→CH 与 UCS→A*→ALT A* 两组对比 + 路线图 |
 | Machine Learning | 标签、模型、特征、训练、指标 | 输入输出图 + 结果表 + SHAP |
-| Performance | 搜索、ML、系统端到端评估 | summary 表 + 关键截图 |
+| Performance | search results、ML results、complexity、limitations | 结果表 + 算法复杂度/取舍图 + limitations |
 
 ## 建议分工
 
@@ -443,10 +440,10 @@ Report 可以更详细，PPT 要更像讲故事：
 | A | Introduction + final story check | 项目概览、系统流程图、demo 截图，并最终检查整份 PPT 叙事是否连贯 |
 | B | Problem Definition + CSP | 输入/约束/目标表，pre-CSP 与 post-CSP 的 feasibility 解释 |
 | C | Dataset | 路网、站点、CH index、POI、UrbanEV 占用率数据来源与处理流程 |
-| D | Search Strategy + search performance | BFS→Bi-BFS→CH 与 UCS→A*→ALT A* 两组搜索策略，说明 CSP 如何嵌入搜索流程，算法图，搜索性能指标 |
-| E | Machine Learning + ML performance | XGBoost 模型、特征、训练切分、防泄漏设计、结果图和 ML 指标 |
+| D | Search Strategy + search results + complexity | BFS→Bi-BFS→CH 与 UCS→A*→ALT A* 两组搜索策略，说明 CSP 如何嵌入搜索流程，算法图，搜索结果和复杂度取舍 |
+| E | Machine Learning + ML results + limitations | XGBoost 模型、特征、训练切分、防泄漏设计、结果图、ML 指标和 occupancy/ranking 局限 |
 
-Performance 不建议单独分给第六个人。5 人版本里，搜索性能由 D 负责，机器学习性能由 E 负责，系统 demo 截图和最终 summary 表由 A 在整合阶段收口。
+Performance 不建议单独分给第六个人。5 人版本里，search results 和 complexity 由 D 负责，ML results 和 limitations 由 E 负责，最终 summary 由 A 在整合阶段收口。
 
 最终整合人需要统一：
 
@@ -474,4 +471,4 @@ Performance 不建议单独分给第六个人。5 人版本里，搜索性能由
 - Dataset 是否讲清楚时间切分和无泄漏？
 - Search Strategy 是否按 BFS→Bidirectional BFS→CH 和 UCS→A*→ALT A* 两组逻辑组织？
 - Machine Learning 是否正确说明预测目标是 future occupancy rate？
-- Performance 是否同时覆盖算法、模型和系统 demo？
+- Performance 是否覆盖 search results、ML results、complexity 和 limitations？

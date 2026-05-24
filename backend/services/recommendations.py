@@ -30,6 +30,7 @@ from backend.schemas import RecommendationItem, RecommendationRequest, Recommend
 from backend.services.geo_data import contains_shenzhen, load_station_poi_features
 
 RANKING_METRICS = get_args(RecommendationRequest.model_fields["ranking_metric"].annotation)
+BALANCED_OCCUPANCY_RISK_WEIGHT = 1.0
 
 
 @lru_cache(maxsize=1)
@@ -170,7 +171,10 @@ def _merge_occupancy_predictions(results: pd.DataFrame, request: RecommendationR
     out["prediction_source"] = out["station_id"].map(
         lambda value: predictions[int(value)].prediction_source if pd.notna(value) else ""
     )
-    out["ml_rank_score"] = out.apply(_ml_rank_score, axis=1)
+    out["ml_rank_score"] = out.apply(
+        lambda row: _balanced_rank_score(row, request.max_drive_time_min),
+        axis=1,
+    )
     feasible = out[out["passed_constraints"]].copy()
     if feasible.empty:
         return out
@@ -211,12 +215,12 @@ def _parse_simulated_now(value: str | None):
         raise ValueError("simulated_now must be a valid datetime, for example 2023-02-01T08:00:00.") from exc
 
 
-def _ml_rank_score(row: pd.Series) -> float | None:
+def _balanced_rank_score(row: pd.Series, max_drive_time_min: float) -> float | None:
     drive_time = _optional_float(row.get("drive_time_min"))
     occupancy = _optional_float(row.get("predicted_occupancy_rate"))
     if drive_time is None or occupancy is None:
         return None
-    return drive_time + occupancy * 10.0
+    return drive_time / max_drive_time_min + BALANCED_OCCUPANCY_RISK_WEIGHT * occupancy
 
 
 def _row_to_item(row: pd.Series) -> RecommendationItem:

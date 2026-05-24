@@ -25,7 +25,7 @@ export function DemoTimeExplanationPanel({ selectedRecommendation }: DemoTimeExp
         <Metric label="Predicted occupancy" value={formatPercent(selectedRecommendation.predicted_occupancy_rate)} />
         <Metric label="Prediction horizon" value={`${formatMetric(selectedRecommendation.prediction_horizon_min)} min`} />
         <Metric label="Prediction time" value={formatPredictionTime(selectedRecommendation.prediction_time)} />
-        <Metric label="ML rank score" value={formatMetric(selectedRecommendation.ml_rank_score)} />
+        <Metric label="Balanced score" value={formatMetric(selectedRecommendation.ml_rank_score)} />
         <Metric label="Source" value={selectedRecommendation.prediction_source || "-"} />
         <div className="ui-metric">
           <span>Occupancy risk</span>

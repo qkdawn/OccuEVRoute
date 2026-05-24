@@ -19,7 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.schemas import RecommendationItem, RecommendationResponse, RecommendationRequest, SearchTrace
-from backend.services.recommendations import _build_ranking_orders, _sort_recommendations
+from backend.services.recommendations import _balanced_rank_score, _build_ranking_orders, _sort_recommendations
 from ch_index import CHEdge, CHIndex
 from ch_preprocess import build_ch_index
 from ch_search import _frontiers_cannot_improve, ch_bidirectional_dijkstra_search
@@ -255,6 +255,12 @@ def test_build_ranking_orders_returns_all_metrics() -> None:
         "occupancy": [2, 1],
         "arrival_soc": [1, 2],
     }
+
+
+def test_balanced_rank_score_normalizes_drive_time_and_penalizes_occupancy() -> None:
+    row = pd.Series({"drive_time_min": 15.0, "predicted_occupancy_rate": 0.25})
+
+    assert _balanced_rank_score(row, max_drive_time_min=30.0) == pytest.approx(0.75)
 
 
 def test_recommendation_response_includes_ranking_orders() -> None:

@@ -24,7 +24,7 @@ export function SelectedRoutePanel({ selectedRecommendation }: SelectedRoutePane
         <Metric label="Nearby POI" value={formatPoiSummary(selectedRecommendation)} />
         <Metric label="Predicted occupancy" value={formatPercent(selectedRecommendation.predicted_occupancy_rate)} />
         <Metric label="Prediction horizon" value={`${formatMetric(selectedRecommendation.prediction_horizon_min)} min`} />
-        <Metric label="ML rank score" value={formatMetric(selectedRecommendation.ml_rank_score)} />
+        <Metric label="Balanced score" value={formatMetric(selectedRecommendation.ml_rank_score)} />
       </div>
     </>
   );
