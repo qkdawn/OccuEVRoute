@@ -12,13 +12,17 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ROUTE_PLANNING_DIR = PROJECT_ROOT / "src" / "route_planning"
+WAITING_PREDICTION_DIR = PROJECT_ROOT / "src" / "waiting_prediction"
 if str(ROUTE_PLANNING_DIR) not in sys.path:
     sys.path.insert(0, str(ROUTE_PLANNING_DIR))
+if str(WAITING_PREDICTION_DIR) not in sys.path:
+    sys.path.insert(0, str(WAITING_PREDICTION_DIR))
 
 from ch_index import CHIndex
 from constraints import UserConstraints
 from graph_loader import load_road_graph, load_station_access, nearest_road_edge_snap
 from landmark_heuristic import LandmarkHeuristic
+from occupancy_predictor import get_historical_occupancy_predictor, historical_now
 from recommender import recommend_charging_stations
 from search_algorithms import SearchContext
 
@@ -57,6 +61,11 @@ def get_ch_index() -> CHIndex:
         raise ValueError(str(exc)) from exc
 
 
+@lru_cache(maxsize=1)
+def get_occupancy_predictor():
+    return get_historical_occupancy_predictor()
+
+
 def warmup_data() -> None:
     graph = get_graph()
     nearest_road_edge_snap(graph, 22.65, 114.05)
@@ -64,6 +73,7 @@ def warmup_data() -> None:
     get_station_poi_features()
     get_landmark_heuristic()
     get_ch_index()
+    get_occupancy_predictor()
 
 
 def recommend(request: RecommendationRequest) -> RecommendationResponse:
@@ -86,7 +96,7 @@ def recommend(request: RecommendationRequest) -> RecommendationResponse:
         request.lng,
         algorithm=request.algorithm,
         constraints=constraints,
-        top_k=request.top_k,
+        top_k=request.max_candidates,
         graph=get_graph(),
         stations=get_stations(),
         search_context=SearchContext(
@@ -95,6 +105,7 @@ def recommend(request: RecommendationRequest) -> RecommendationResponse:
         ),
     )
     results = _merge_poi_features(results)
+    results = _merge_occupancy_predictions(results, request)
     return RecommendationResponse(
         recommendations=[_row_to_item(row) for _, row in results.iterrows()],
     )
@@ -107,6 +118,65 @@ def _merge_poi_features(results: pd.DataFrame) -> pd.DataFrame:
     if poi_features.empty:
         return results
     return results.merge(poi_features, on="station_id", how="left")
+
+
+def _merge_occupancy_predictions(results: pd.DataFrame, request: RecommendationRequest) -> pd.DataFrame:
+    if results.empty or "station_id" not in results.columns:
+        return results
+    out = results.copy()
+    predictor = get_occupancy_predictor()
+    simulated_now = _parse_simulated_now(request.simulated_now)
+    prediction_input = out[out["station_id"].notna()].copy()
+    station_ids = [int(station_id) for station_id in prediction_input["station_id"]]
+    drive_times = [_optional_float(value) for value in prediction_input["drive_time_min"]]
+    predictions = predictor.predict(station_ids, drive_times, simulated_now=simulated_now)
+
+    out["predicted_occupancy_rate"] = out["station_id"].map(
+        lambda value: predictions[int(value)].predicted_occupancy_rate if pd.notna(value) else None
+    )
+    out["prediction_horizon_min"] = out["station_id"].map(
+        lambda value: predictions[int(value)].prediction_horizon_min if pd.notna(value) else None
+    )
+    out["prediction_time"] = out["station_id"].map(
+        lambda value: predictions[int(value)].prediction_time if pd.notna(value) else None
+    )
+    out["prediction_source"] = out["station_id"].map(
+        lambda value: predictions[int(value)].prediction_source if pd.notna(value) else ""
+    )
+    out["ml_rank_score"] = out.apply(_ml_rank_score, axis=1)
+    feasible = out[out["passed_constraints"]].copy()
+    if feasible.empty:
+        return out
+    return _sort_recommendations(feasible, request.ranking_metric).head(request.top_k).reset_index(drop=True)
+
+
+def _sort_recommendations(results: pd.DataFrame, ranking_metric: str) -> pd.DataFrame:
+    sort_columns = {
+        "balanced": ["ml_rank_score", "drive_time_min", "distance_km"],
+        "drive_time": ["drive_time_min", "distance_km", "predicted_occupancy_rate"],
+        "distance": ["distance_km", "drive_time_min", "predicted_occupancy_rate"],
+        "occupancy": ["predicted_occupancy_rate", "drive_time_min", "distance_km"],
+        "arrival_soc": ["arrival_soc", "drive_time_min", "distance_km"],
+    }[ranking_metric]
+    ascending = [False if column == "arrival_soc" else True for column in sort_columns]
+    return results.sort_values(sort_columns, ascending=ascending, na_position="last")
+
+
+def _parse_simulated_now(value: str | None):
+    if not value:
+        return historical_now()
+    try:
+        return pd.Timestamp(value)
+    except ValueError as exc:
+        raise ValueError("simulated_now must be a valid datetime, for example 2023-02-01T08:00:00.") from exc
+
+
+def _ml_rank_score(row: pd.Series) -> float | None:
+    drive_time = _optional_float(row.get("drive_time_min"))
+    occupancy = _optional_float(row.get("predicted_occupancy_rate"))
+    if drive_time is None or occupancy is None:
+        return None
+    return drive_time + occupancy * 10.0
 
 
 def _row_to_item(row: pd.Series) -> RecommendationItem:
@@ -138,6 +208,11 @@ def _row_to_item(row: pd.Series) -> RecommendationItem:
         poi_business_residential_count=_optional_int(row.get("poi_business_residential_count")),
         poi_food_beverage_count=_optional_int(row.get("poi_food_beverage_count")),
         arrival_soc=_optional_float(row.get("arrival_soc")),
+        predicted_occupancy_rate=_optional_float(row.get("predicted_occupancy_rate")),
+        prediction_horizon_min=_optional_float(row.get("prediction_horizon_min")),
+        prediction_time=str(row.get("prediction_time")) if row.get("prediction_time") else None,
+        prediction_source=str(row.get("prediction_source") or ""),
+        ml_rank_score=_optional_float(row.get("ml_rank_score")),
         passed_constraints=bool(row.get("passed_constraints")),
         reject_reason=str(row.get("reject_reason") or ""),
     )

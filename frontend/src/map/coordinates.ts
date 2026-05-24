@@ -24,7 +24,7 @@ function transformLng(x: number, y: number): number {
 
 function gcjDelta(point: Point): Point {
   const a = 6378245.0;
-  const ee = 0.00669342162296594323;
+  const ee = 0.006693421622965943;
   const x = point.lng - 105.0;
   const y = point.lat - 35.0;
   let dlat = transformLat(x, y);

@@ -4,22 +4,28 @@ import sys
 from pathlib import Path
 
 import networkx as nx
+import pandas as pd
 import pytest
 from pydantic import ValidationError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ROUTE_PLANNING_DIR = PROJECT_ROOT / "src" / "route_planning"
+WAITING_PREDICTION_DIR = PROJECT_ROOT / "src" / "waiting_prediction"
 if str(ROUTE_PLANNING_DIR) not in sys.path:
     sys.path.insert(0, str(ROUTE_PLANNING_DIR))
+if str(WAITING_PREDICTION_DIR) not in sys.path:
+    sys.path.insert(0, str(WAITING_PREDICTION_DIR))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.schemas import RecommendationRequest, SearchTrace
+from backend.services.recommendations import _sort_recommendations
 from ch_index import CHEdge, CHIndex
 from ch_preprocess import build_ch_index
 from ch_search import _frontiers_cannot_improve, ch_bidirectional_dijkstra_search
 from graph_loader import _StartAccessGraph
 from search_algorithms import SearchContext, astar_search, bfs_search, bidirectional_bfs_search, run_search, ucs_search
+from occupancy_predictor import DEFAULT_SIMULATION_WEEK_END, DEFAULT_SIMULATION_WEEK_START, historical_now
 
 
 def _graph(edges: list[tuple[str, str]]) -> nx.MultiDiGraph:
@@ -183,6 +189,51 @@ def test_schema_accepts_ch_dijkstra_algorithm() -> None:
     request = RecommendationRequest(lat=22.65, lng=114.05, algorithm="ch_bidirectional_dijkstra")
 
     assert request.algorithm == "ch_bidirectional_dijkstra"
+
+
+def test_recommendation_request_accepts_ranking_metric() -> None:
+    request = RecommendationRequest(lat=22.65, lng=114.05, ranking_metric="occupancy")
+
+    assert request.ranking_metric == "occupancy"
+
+
+def test_sort_recommendations_uses_selected_metric() -> None:
+    results = pd.DataFrame(
+        [
+            {
+                "station_id": 1,
+                "drive_time_min": 8.0,
+                "distance_km": 6.0,
+                "predicted_occupancy_rate": 0.9,
+                "arrival_soc": 0.8,
+                "ml_rank_score": 17.0,
+            },
+            {
+                "station_id": 2,
+                "drive_time_min": 12.0,
+                "distance_km": 4.0,
+                "predicted_occupancy_rate": 0.1,
+                "arrival_soc": 0.7,
+                "ml_rank_score": 13.0,
+            },
+        ]
+    )
+
+    assert _sort_recommendations(results, "drive_time")["station_id"].tolist() == [1, 2]
+    assert _sort_recommendations(results, "distance")["station_id"].tolist() == [2, 1]
+    assert _sort_recommendations(results, "occupancy")["station_id"].tolist() == [2, 1]
+    assert _sort_recommendations(results, "arrival_soc")["station_id"].tolist() == [1, 2]
+    assert _sort_recommendations(results, "balanced")["station_id"].tolist() == [2, 1]
+
+
+def test_historical_now_preserves_weekday_and_time_inside_demo_week() -> None:
+    simulated = historical_now("2026-05-24T14:37:12")
+
+    assert DEFAULT_SIMULATION_WEEK_START <= simulated <= DEFAULT_SIMULATION_WEEK_END
+    assert simulated == pd.Timestamp("2023-02-12 14:35:00")
+    assert simulated.dayofweek == pd.Timestamp("2026-05-24").dayofweek
+    assert simulated.hour == 14
+    assert simulated.minute == 35
 
 
 class _ExplodingLandmark:

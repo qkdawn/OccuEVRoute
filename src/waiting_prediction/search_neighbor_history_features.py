@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from itertools import combinations
-import math
 import time
 from pathlib import Path
 

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
+import { useEffect, useMemo, useRef } from "react";
 import type { Basemap, BoundaryGeoJson, BoundaryGeometry, LayerVisibility, Point, RecommendationItem, SearchTraceRole } from "../types";
 import { fromMapPoint, toMapPoint } from "./coordinates";
 
@@ -411,6 +411,7 @@ function stationTooltip(item: RecommendationItem, rank: number) {
     `Top ${rank} | ${item.station_display_name ?? `station_id: ${item.station_id}`}<br>` +
     `drive_time_min: ${formatMetric(item.drive_time_min)}<br>` +
     `distance_km: ${formatMetric(item.distance_km)}<br>` +
+    `predicted_occupancy: ${formatPercent(item.predicted_occupancy_rate)}<br>` +
     `road_snap_distance_m: ${snap}<br>` +
     `charge_count: ${item.charge_count ?? ""}<br>` +
     `nearby_poi: ${formatPoiSummary(item)}<br>` +
@@ -420,6 +421,10 @@ function stationTooltip(item: RecommendationItem, rank: number) {
 
 function formatMetric(value: number | null) {
   return value === null ? "" : value.toFixed(2);
+}
+
+function formatPercent(value: number | null) {
+  return value === null ? "" : `${(value * 100).toFixed(1)}%`;
 }
 
 function formatPoiSummary(item: RecommendationItem) {
@@ -480,22 +485,30 @@ function collectOuterRings(geometry: BoundaryGeometry): number[][][] {
 
 function boundaryBounds(boundary: BoundaryGeoJson): L.LatLngBounds {
   const bounds = L.latLngBounds([]);
-  boundary.features.forEach((feature) => extendBoundsWithGeometry(bounds, feature.geometry));
+  boundary.features.forEach((feature) => {
+    extendBoundsWithGeometry(bounds, feature.geometry);
+  });
   return bounds;
 }
 
 function extendBoundsWithGeometry(bounds: L.LatLngBounds, geometry: BoundaryGeometry) {
   if (geometry.type === "Polygon") {
-    geometry.coordinates.forEach((ring) => extendBoundsWithRing(bounds, ring));
+    geometry.coordinates.forEach((ring) => {
+      extendBoundsWithRing(bounds, ring);
+    });
     return;
   }
   geometry.coordinates.forEach((polygon) => {
-    polygon.forEach((ring) => extendBoundsWithRing(bounds, ring));
+    polygon.forEach((ring) => {
+      extendBoundsWithRing(bounds, ring);
+    });
   });
 }
 
 function extendBoundsWithRing(bounds: L.LatLngBounds, ring: number[][]) {
-  ring.forEach((coordinate) => bounds.extend([coordinate[1], coordinate[0]]));
+  ring.forEach((coordinate) => {
+    bounds.extend([coordinate[1], coordinate[0]]);
+  });
 }
 
 function pointInBoundary(point: Point, boundary: BoundaryGeoJson): boolean {

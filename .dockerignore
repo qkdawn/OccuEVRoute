@@ -17,6 +17,8 @@ data/interim
 data/processed
 data/sample
 models/*
+!models/occupancy_horizon_xgboost.pkl
+!models/occupancy_horizon_features.json
 *.zip
 *.7z
 *.rar

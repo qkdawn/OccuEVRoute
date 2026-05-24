@@ -54,7 +54,7 @@ def recommend_charging_stations(user_latitude, user_longitude, algorithm="astar"
         pre_ok, pre_reason = pre_csp_check(...)    # 2. 前置过滤
         search = run_search(...)                    # 3. 路网搜索
         post_ok, post_reason, arrival_soc = post_csp_check(...)  # 4. 后置验证
-    return feasible.sort_values(["drive_time_min", "distance_km"])  # 5. 排序返回
+    return feasible  # 5. 后端合并 ML 占用率后按用户选择的 ranking metric 排序
 ```
 
 ---
@@ -108,7 +108,7 @@ def post_csp_check(path_found, distance_km, drive_time_min, constraints):
 
 - **两阶段过滤**：先用静态属性快速剪枝（不跑搜索），再用路网结果精确验证，节省大量计算。
 - **成本函数**：搜索主代价是**行驶时间（分钟）**，而不是距离或金钱，因为用户最关心"多久能充上电"。
-- **最终排序**：优先按 `drive_time_min` 升序，再按 `distance_km` 升序，取前 K 个可行结果。
+- **最终排序**：后端默认一定合并 ML occupancy prediction，再按用户选择的 ranking metric 排序。默认 balanced score 是 `drive_time_min + predicted_occupancy_rate * 10`；也可以切换为最短行驶时间、最短距离、最低预测占用率或最高到达 SOC。
 
 ---
 

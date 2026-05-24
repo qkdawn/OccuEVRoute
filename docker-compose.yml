@@ -8,6 +8,8 @@ services:
       - "9000:8000"
     volumes:
       - ./data:/app/data:ro
+      - ./models:/app/models:ro
+      - ./ML/Data:/app/ML/Data:ro
 
   frontend:
     build:

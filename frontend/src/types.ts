@@ -1,5 +1,6 @@
 export type Algorithm = "bfs" | "bidirectional_bfs" | "ucs" | "astar" | "alt_astar" | "ch_bidirectional_dijkstra";
 export type Basemap = "gaode" | "carto" | "osm";
+export type RankingMetric = "balanced" | "drive_time" | "distance" | "occupancy" | "arrival_soc";
 
 export interface LayerVisibility {
   boundary: boolean;
@@ -31,6 +32,7 @@ export interface SearchTrace {
 export interface RecommendationRequest {
   lat: number;
   lng: number;
+  simulated_now?: string | null;
   algorithm: Algorithm;
   max_candidates: number;
   max_search_radius_km: number;
@@ -42,6 +44,7 @@ export interface RecommendationRequest {
   min_charge_count: number;
   max_road_snap_distance_m: number;
   max_start_snap_distance_m: number;
+  ranking_metric: RankingMetric;
   top_k: number;
 }
 
@@ -69,6 +72,11 @@ export interface RecommendationItem {
   poi_business_residential_count: number | null;
   poi_food_beverage_count: number | null;
   arrival_soc: number | null;
+  predicted_occupancy_rate: number | null;
+  prediction_horizon_min: number | null;
+  prediction_time: string | null;
+  prediction_source: string;
+  ml_rank_score: number | null;
   passed_constraints: boolean;
   reject_reason: string;
 }
