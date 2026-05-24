@@ -92,6 +92,7 @@ class RecommendationItem(BaseModel):
 
 class RecommendationResponse(BaseModel):
     recommendations: list[RecommendationItem]
+    ranking_orders: dict[RankingMetric, list[int]]
 
 
 class HealthResponse(BaseModel):

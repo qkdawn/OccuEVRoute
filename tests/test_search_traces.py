@@ -18,8 +18,8 @@ if str(WAITING_PREDICTION_DIR) not in sys.path:
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.schemas import RecommendationRequest, SearchTrace
-from backend.services.recommendations import _sort_recommendations
+from backend.schemas import RecommendationItem, RecommendationResponse, RecommendationRequest, SearchTrace
+from backend.services.recommendations import _build_ranking_orders, _sort_recommendations
 from ch_index import CHEdge, CHIndex
 from ch_preprocess import build_ch_index
 from ch_search import _frontiers_cannot_improve, ch_bidirectional_dijkstra_search
@@ -224,6 +224,85 @@ def test_sort_recommendations_uses_selected_metric() -> None:
     assert _sort_recommendations(results, "occupancy")["station_id"].tolist() == [2, 1]
     assert _sort_recommendations(results, "arrival_soc")["station_id"].tolist() == [1, 2]
     assert _sort_recommendations(results, "balanced")["station_id"].tolist() == [2, 1]
+
+
+def test_build_ranking_orders_returns_all_metrics() -> None:
+    results = pd.DataFrame(
+        [
+            {
+                "station_id": 1,
+                "drive_time_min": 8.0,
+                "distance_km": 6.0,
+                "predicted_occupancy_rate": 0.9,
+                "arrival_soc": 0.8,
+                "ml_rank_score": 17.0,
+            },
+            {
+                "station_id": 2,
+                "drive_time_min": 12.0,
+                "distance_km": 4.0,
+                "predicted_occupancy_rate": 0.1,
+                "arrival_soc": 0.7,
+                "ml_rank_score": 13.0,
+            },
+        ]
+    )
+
+    assert _build_ranking_orders(results, top_k=2) == {
+        "balanced": [2, 1],
+        "drive_time": [1, 2],
+        "distance": [2, 1],
+        "occupancy": [2, 1],
+        "arrival_soc": [1, 2],
+    }
+
+
+def test_recommendation_response_includes_ranking_orders() -> None:
+    item = RecommendationItem(
+        station_id=1,
+        station_display_name="Charging Station 1",
+        algorithm="astar",
+        station_latitude=22.6,
+        station_longitude=114.0,
+        station_road_latitude=22.6,
+        station_road_longitude=114.0,
+        start_node_latitude=22.65,
+        start_node_longitude=114.05,
+        start_snap_distance_m=10.0,
+        route_coordinates=[],
+        search_trace={"kind": "single", "layers": [{"role": "single", "coordinates": []}]},
+        distance_km=1.0,
+        drive_time_min=2.0,
+        road_snap_distance_m=3.0,
+        expanded_nodes=4,
+        runtime_seconds=0.01,
+        charge_count=5,
+        poi_total_count=6,
+        poi_lifestyle_services_count=2,
+        poi_business_residential_count=3,
+        poi_food_beverage_count=1,
+        arrival_soc=0.7,
+        predicted_occupancy_rate=0.2,
+        prediction_horizon_min=5.0,
+        prediction_time="2023-02-06T08:05:00",
+        prediction_source="historical_urbanev",
+        ml_rank_score=4.0,
+        passed_constraints=True,
+        reject_reason="",
+    )
+
+    response = RecommendationResponse(
+        recommendations=[item],
+        ranking_orders={
+            "balanced": [1],
+            "drive_time": [1],
+            "distance": [1],
+            "occupancy": [1],
+            "arrival_soc": [1],
+        },
+    )
+
+    assert response.ranking_orders["balanced"] == [1]
 
 
 def test_historical_now_preserves_weekday_and_time_inside_demo_week() -> None:

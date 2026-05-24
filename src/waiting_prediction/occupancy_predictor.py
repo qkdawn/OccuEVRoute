@@ -15,7 +15,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -157,6 +157,29 @@ class HistoricalOccupancyPredictor:
                 prediction_source="historical_urbanev",
             )
         return predictions
+
+    def warmup(
+        self,
+        station_ids: Sequence[int],
+        drive_times_min: Sequence[float | None],
+        simulated_now: pd.Timestamp | None = None,
+    ) -> None:
+        """Populate the lazy caches used by the first real prediction call."""
+        if not self.available:
+            return
+        now = pd.Timestamp(simulated_now or self.simulated_now or historical_now())
+        self._load_features()
+        self._load_model()
+        self._weather_at(now)
+        if self._poi is None:
+            self._poi = _load_poi_features(self.poi_file)
+        if self._neighbors is None:
+            stations = _station_coordinates(self.station_dir)
+            self._neighbors = _neighbor_map_by_k(stations, self.neighbor_k)
+        for station_id, drive_time_min in zip(station_ids, drive_times_min):
+            if drive_time_min is None or not math.isfinite(float(drive_time_min)):
+                continue
+            self._feature_row(int(station_id), now, _bounded_horizon(float(drive_time_min)))
 
     def _feature_row(self, station_id: int, now: pd.Timestamp, horizon_min: float) -> dict[str, float] | None:
         current = _station_state(self.station_dir, station_id, now)

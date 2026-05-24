@@ -6,7 +6,7 @@ import math
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pandas as pd
 
@@ -28,6 +28,8 @@ from search_algorithms import SearchContext
 
 from backend.schemas import RecommendationItem, RecommendationRequest, RecommendationResponse, SearchTrace
 from backend.services.geo_data import contains_shenzhen, load_station_poi_features
+
+RANKING_METRICS = get_args(RecommendationRequest.model_fields["ranking_metric"].annotation)
 
 
 @lru_cache(maxsize=1)
@@ -73,7 +75,7 @@ def warmup_data() -> None:
     get_station_poi_features()
     get_landmark_heuristic()
     get_ch_index()
-    get_occupancy_predictor()
+    _warmup_default_recommendation(graph)
 
 
 def recommend(request: RecommendationRequest) -> RecommendationResponse:
@@ -106,8 +108,33 @@ def recommend(request: RecommendationRequest) -> RecommendationResponse:
     )
     results = _merge_poi_features(results)
     results = _merge_occupancy_predictions(results, request)
+    ranking_orders = _build_ranking_orders(results, request.top_k)
+    ordered_results = _sort_recommendations(results, request.ranking_metric).head(request.top_k).reset_index(drop=True)
     return RecommendationResponse(
-        recommendations=[_row_to_item(row) for _, row in results.iterrows()],
+        recommendations=[_row_to_item(row) for _, row in ordered_results.iterrows()],
+        ranking_orders=ranking_orders,
+    )
+
+
+def _warmup_default_recommendation(graph) -> None:
+    constraints = UserConstraints()
+    results = recommend_charging_stations(
+        22.65,
+        114.05,
+        algorithm="astar",
+        constraints=constraints,
+        top_k=constraints.max_candidates,
+        graph=graph,
+        stations=get_stations(),
+        search_context=SearchContext(landmark_heuristic=get_landmark_heuristic()),
+    )
+    if results.empty or "station_id" not in results.columns:
+        get_occupancy_predictor().warmup([], [])
+        return
+    prediction_input = results[results["station_id"].notna()]
+    get_occupancy_predictor().warmup(
+        [int(station_id) for station_id in prediction_input["station_id"]],
+        [_optional_float(value) for value in prediction_input["drive_time_min"]],
     )
 
 
@@ -147,7 +174,20 @@ def _merge_occupancy_predictions(results: pd.DataFrame, request: RecommendationR
     feasible = out[out["passed_constraints"]].copy()
     if feasible.empty:
         return out
-    return _sort_recommendations(feasible, request.ranking_metric).head(request.top_k).reset_index(drop=True)
+    return feasible.reset_index(drop=True)
+
+
+def _build_ranking_orders(results: pd.DataFrame, top_k: int) -> dict[str, list[int]]:
+    if results.empty or "station_id" not in results.columns:
+        return {metric: [] for metric in RANKING_METRICS}
+    return {
+        metric: [
+            int(station_id)
+            for station_id in _sort_recommendations(results, metric)["station_id"].head(top_k)
+            if pd.notna(station_id)
+        ]
+        for metric in RANKING_METRICS
+    }
 
 
 def _sort_recommendations(results: pd.DataFrame, ranking_metric: str) -> pd.DataFrame:

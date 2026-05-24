@@ -83,6 +83,7 @@ export interface RecommendationItem {
 
 export interface RecommendationResponse {
   recommendations: RecommendationItem[];
+  ranking_orders: Record<RankingMetric, number[]>;
 }
 
 export type BoundaryGeometry =

@@ -19,7 +19,7 @@ import {
 } from "./components/planner";
 import { Panel } from "./components/ui";
 import { RouteMap } from "./map/RouteMap";
-import type { BoundaryGeoJson, LayerVisibility, Point, RecommendationItem } from "./types";
+import type { BoundaryGeoJson, LayerVisibility, Point, RankingMetric, RecommendationItem } from "./types";
 
 type PanelPlacement = "left" | "right";
 type PanelId =
@@ -66,6 +66,14 @@ const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
   snapLines: true,
 };
 
+const EMPTY_RANKING_ORDERS: Record<RankingMetric, number[]> = {
+  balanced: [],
+  drive_time: [],
+  distance: [],
+  occupancy: [],
+  arrival_soc: [],
+};
+
 const PANELS: PanelConfig[] = [
   { id: "search", title: "Search configuration", eyebrow: "Plan", placement: "left", defaultOpen: true, enabled: true },
   { id: "vehicle", title: "Vehicle constraints", eyebrow: "Feasibility", placement: "left", defaultOpen: false, enabled: true },
@@ -87,6 +95,7 @@ export function App() {
   const [selectedPoint, setSelectedPoint] = useState<Point | null>(null);
   const [submittedPoint, setSubmittedPoint] = useState<Point | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
+  const [rankingOrders, setRankingOrders] = useState<Record<RankingMetric, number[]>>(EMPTY_RANKING_ORDERS);
   const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
   const [boundary, setBoundary] = useState<BoundaryGeoJson | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,23 +103,27 @@ export function App() {
   const [searchPlaybackProgress, setSearchPlaybackProgress] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
+  const rankedRecommendations = useMemo(() => {
+    return rankRecommendations(recommendations, rankingOrders[form.rankingMetric]).slice(0, form.maxCandidates);
+  }, [form.maxCandidates, form.rankingMetric, recommendations, rankingOrders]);
+
   const selectedRecommendation = useMemo(() => {
-    return recommendations.find((item) => item.station_id === selectedStationId) ?? recommendations[0] ?? null;
-  }, [recommendations, selectedStationId]);
+    return rankedRecommendations.find((item) => item.station_id === selectedStationId) ?? rankedRecommendations[0] ?? null;
+  }, [rankedRecommendations, selectedStationId]);
 
   const panelSummaries = useMemo<Record<PanelId, string>>(
     () => ({
-      search: `${form.maxCandidates} candidates, ${form.rankingMetric.replace("_", " ")} ranking`,
+      search: `${form.maxSearchRadiusKm} km radius, ${form.maxDriveTimeMin} min cap`,
       vehicle: `${form.currentSocPercent}% SOC, ${form.batteryCapacityKwh} kWh battery`,
       algorithm: `${form.algorithm.toUpperCase()}, snap ${form.maxStartSnapDistanceM}/${form.maxRoadSnapDistanceM} m`,
       layers: layerSummary(layerVisibility),
       location: selectedPoint ? `${selectedPoint.lat.toFixed(4)}, ${selectedPoint.lng.toFixed(4)}` : "Waiting for map click",
-      recommendations: recommendations.length ? `${recommendations.length} ranked stations` : "No run yet",
+      recommendations: rankedRecommendations.length ? `${rankedRecommendations.length} ranked by ${form.rankingMetric.replace("_", " ")}` : `${form.rankingMetric.replace("_", " ")} ranking`,
       route: selectedRecommendation ? `${formatMetric(selectedRecommendation.drive_time_min)} min, ${formatMetric(selectedRecommendation.distance_km)} km` : "No route selected",
       demoTime: selectedRecommendation ? `${formatMetric(selectedRecommendation.prediction_horizon_min)} min horizon` : "No prediction yet",
       playback: selectedRecommendation ? `${selectedRecommendation.expanded_nodes} expanded nodes` : "No trace yet",
     }),
-    [form, layerVisibility, recommendations.length, selectedPoint, selectedRecommendation],
+    [form, layerVisibility, rankedRecommendations.length, selectedPoint, selectedRecommendation],
   );
 
   function updateForm<T extends keyof FormState>(key: T, value: FormState[T]) {
@@ -128,6 +141,7 @@ export function App() {
   function handlePointChange(point: Point) {
     setSelectedPoint(point);
     setRecommendations([]);
+    setRankingOrders(EMPTY_RANKING_ORDERS);
     setSelectedStationId(null);
     setIsPlaybackRunning(false);
     setSearchPlaybackProgress(1);
@@ -137,6 +151,7 @@ export function App() {
   function handleInvalidPoint() {
     setSelectedPoint(null);
     setRecommendations([]);
+    setRankingOrders(EMPTY_RANKING_ORDERS);
     setSelectedStationId(null);
     setIsPlaybackRunning(false);
     setSearchPlaybackProgress(1);
@@ -149,6 +164,7 @@ export function App() {
     setSelectedPoint(null);
     setSubmittedPoint(null);
     setRecommendations([]);
+    setRankingOrders(EMPTY_RANKING_ORDERS);
     setSelectedStationId(null);
     setIsPlaybackRunning(false);
     setSearchPlaybackProgress(1);
@@ -184,8 +200,9 @@ export function App() {
         top_k: form.maxCandidates,
       });
       setRecommendations(response.recommendations);
+      setRankingOrders(response.ranking_orders);
       setSubmittedPoint(selectedPoint);
-      setSelectedStationId(response.recommendations[0]?.station_id ?? null);
+      setSelectedStationId(response.ranking_orders[form.rankingMetric][0] ?? response.recommendations[0]?.station_id ?? null);
       setSearchPlaybackProgress(1);
       setIsPlaybackRunning(false);
     } catch (err) {
@@ -244,13 +261,13 @@ export function App() {
         <div className="map-status-strip">
           <span>{selectedPoint ? "Start selected" : "Choose Shenzhen start"}</span>
           <strong>{algorithmShortLabel(form.algorithm)}</strong>
-          <span>{recommendations.length ? `${recommendations.length} ranked` : "No run"}</span>
+          <span>{rankedRecommendations.length ? `${rankedRecommendations.length} ranked` : "No run"}</span>
         </div>
         <RouteMap
           basemap={form.basemap}
           boundary={boundary}
           selectedPoint={selectedPoint}
-          recommendations={recommendations}
+          recommendations={rankedRecommendations}
           selectedStationId={selectedStationId}
           searchPlaybackProgress={searchPlaybackProgress}
           layerVisibility={layerVisibility}
@@ -270,7 +287,15 @@ export function App() {
           renderPanel={(id) => {
             if (id === "location") return <LocationSummaryPanel selectedPoint={selectedPoint} submittedPoint={submittedPoint} />;
             if (id === "recommendations") {
-              return <RecommendationListPanel recommendations={recommendations} selectedStationId={selectedStationId} onStationSelect={setSelectedStationId} />;
+              return (
+                <RecommendationListPanel
+                  form={form}
+                  recommendations={rankedRecommendations}
+                  selectedStationId={selectedStationId}
+                  onStationSelect={setSelectedStationId}
+                  onUpdateForm={updateForm}
+                />
+              );
             }
             if (id === "route") return <SelectedRoutePanel selectedRecommendation={selectedRecommendation} />;
             if (id === "demoTime") return <DemoTimeExplanationPanel selectedRecommendation={selectedRecommendation} />;
@@ -298,6 +323,18 @@ export function App() {
       </aside>
     </main>
   );
+}
+
+function rankRecommendations(recommendations: RecommendationItem[], order: number[]) {
+  if (!recommendations.length || !order.length) return recommendations;
+  const byStationId = new Map(recommendations.map((item) => [item.station_id, item]));
+  const ranked = order.flatMap((stationId) => {
+    const item = byStationId.get(stationId);
+    return item ? [item] : [];
+  });
+  const rankedIds = new Set(ranked.map((item) => item.station_id));
+  const unranked = recommendations.filter((item) => !rankedIds.has(item.station_id));
+  return [...ranked, ...unranked];
 }
 
 function PanelRenderer({
