@@ -59,9 +59,28 @@ Design APIs so callers receive useful domain results instead of needing to recon
 - Reveal the planning flow in a clear order: choose location, tune search and vehicle inputs, recommend stations, inspect route and diagnostics.
 - Keep advanced algorithm and diagnostic controls available but collapsed by default.
 - Use restrained product UI styling. Color should communicate state, selection, route layers, and errors rather than decoration.
+- Keep UI copy concise and operational. Avoid persistent helper text, instructional microcopy, or explanatory paragraphs such as "Replay..." or "Real weekday..." in the interface. Prefer short labels, values, status, errors, and necessary empty-state messages. Put deeper explanations in collapsed diagnostic panels, docs, tooltips, or presentation notes only when they are intentionally requested.
 - Do not make the app feel like a marketing landing page.
 - Do not hide algorithm explanation entirely; it is part of the course-demo value.
 - Do not introduce a large UI framework unless the existing implementation clearly cannot support the required workflow.
+
+## Docker Workflow
+
+Docker is the default demo packaging path. Keep it boring, reproducible, and aligned with the local development ports:
+
+- `Dockerfile.backend` owns the FastAPI runtime image. It installs only `backend/requirements.txt`, copies `backend/` and `src/`, exposes port `8000`, and serves `backend.main:app` with Uvicorn.
+- `frontend/Dockerfile` owns the production frontend image. It builds the Vite app in a Node stage, then serves `dist/` with `frontend/server.mjs`. Do not use `vite preview` as the production container runtime.
+- `frontend/server.mjs` owns container-time frontend routing. Static assets are served directly, client routes fall back to `index.html`, and `/api/` is reverse-proxied to `BACKEND_ORIGIN` with a default of `http://backend:8000`.
+- `docker-compose.yml` is the local demo orchestrator. It publishes backend `9000:8000` and frontend `9090:80`, mounts `data/`, `models/`, and `ML/Data/` read-only into the backend, sets `BACKEND_ORIGIN=http://backend:8000`, and should keep frontend startup dependent on a healthy backend.
+- Keep large/generated data out of images. Route artifacts should be present on the host under `data/processed/` and mounted at runtime; model artifacts should be present under `models/`.
+
+When changing Docker behavior, verify in this order:
+
+1. `docker compose config`
+2. `docker compose build`
+3. `docker compose up`
+4. `Invoke-RestMethod http://localhost:9000/api/health`
+5. Open `http://localhost:9090` and confirm the frontend can call `/api/boundary`.
 
 ## APOSD Red Flags
 
@@ -74,6 +93,19 @@ Before finishing a code change, scan for these design smells:
 - Layers that share the same abstraction or vocabulary.
 - Comments explaining awkward code that should instead become a clearer abstraction.
 - Public interfaces exposing data formats, model internals, route-search details, cache details, or library quirks unnecessarily.
+
+## Implementation Cleanup Pass
+
+After every implementation, perform a cleanup pass before reporting completion. Treat this as part of the work, not an optional follow-up.
+
+1. Review the diff for the files you touched. Remove dead code, obsolete branches, fallback paths that are no longer reachable, temporary debug output, one-off scripts, unused imports, duplicated constants, and CSS or UI states left over from earlier attempts.
+2. Check for temporary artifacts created during the task. Delete scratch files, local exports, generated previews, cache folders, and intermediate assets unless they are intentional project outputs. Do not delete large project data, model artifacts, or user-created files.
+3. Format only the files you changed, using the repository's existing formatter or build tooling. Avoid broad mechanical rewrites when the project does not already enforce them.
+4. Run the smallest relevant verification available for the change. Prefer targeted tests first, then broader checks when the touched surface includes shared behavior, API contracts, Docker packaging, or frontend workflows.
+5. Re-check `git diff` and `git status --short` after cleanup. Confirm the final diff contains only intentional changes and no unrelated user work was reverted or overwritten.
+6. If a cleanup or verification step cannot run, say so in the final response with the reason and the remaining risk.
+
+Do not use cleanup as an excuse for unrelated refactors. Keep the pass scoped to the implementation just completed, and preserve user changes that predate the current task.
 
 ## Verification
 
