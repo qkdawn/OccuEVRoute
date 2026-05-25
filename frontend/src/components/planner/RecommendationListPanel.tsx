@@ -1,5 +1,5 @@
 import type { RankingMetric, RecommendationItem } from "../../types";
-import { EmptyState, NumberField, SelectField, StatusBadge } from "../ui";
+import { EmptyState, SelectField, StatusBadge } from "../ui";
 import { RANKING_METRIC_LABELS } from "./constants";
 import { algorithmShortLabel, formatMetric, occupancyBadge } from "./formatters";
 import type { FormState, FormUpdate } from "./types";
@@ -22,7 +22,6 @@ export function RecommendationListPanel({ form, onStationSelect, onUpdateForm, r
           options={RANKING_METRIC_LABELS}
           onChange={(value) => onUpdateForm("rankingMetric", value as RankingMetric)}
         />
-        <NumberField label="Ranked stations" value={form.maxCandidates} min={3} max={50} step={1} onChange={(value) => onUpdateForm("maxCandidates", value)} />
       </div>
       {!recommendations.length ? (
         <EmptyState title="No recommendations yet" message="Choose a location and run the planner to populate ranked charging stations." />

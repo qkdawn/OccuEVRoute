@@ -32,4 +32,3 @@ export const LAYER_LABELS: Array<[keyof LayerVisibility, string, string]> = [
 ];
 
 export const DEMO_WEEK_LABEL = "2023-02-06 ~ 2023-02-12";
-export const DEMO_TIME_RULE = "Real weekday, hour, and minute map to the same weekday in the demo week; minutes round down to 5-minute data.";

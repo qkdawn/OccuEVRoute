@@ -2,19 +2,16 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchBoundary, fetchRecommendations } from "./api";
 import {
-  AlgorithmConfigurationPanel,
   algorithmShortLabel,
   DemoTimeExplanationPanel,
   type FormState,
   formatMetric,
-  LayerDisplayPanel,
   LocationSummaryPanel,
-  layerSummary,
+  PlannerSettingsPanel,
   RecommendationListPanel,
   SearchConfigurationPanel,
   SearchPlaybackPanel,
   SelectedRoutePanel,
-  VehicleConstraintsPanel,
   WorkspaceHeader,
 } from "./components/planner";
 import { Panel } from "./components/ui";
@@ -24,9 +21,6 @@ import type { BoundaryGeoJson, LayerVisibility, Point, RankingMetric, Recommenda
 type PanelPlacement = "left" | "right";
 type PanelId =
   | "search"
-  | "vehicle"
-  | "algorithm"
-  | "layers"
   | "location"
   | "recommendations"
   | "route"
@@ -75,10 +69,7 @@ const EMPTY_RANKING_ORDERS: Record<RankingMetric, number[]> = {
 };
 
 const PANELS: PanelConfig[] = [
-  { id: "search", title: "Search configuration", eyebrow: "Plan", placement: "left", defaultOpen: true, enabled: true },
-  { id: "vehicle", title: "Vehicle constraints", eyebrow: "Feasibility", placement: "left", defaultOpen: false, enabled: true },
-  { id: "algorithm", title: "Algorithm configuration", eyebrow: "Advanced", placement: "left", defaultOpen: false, enabled: true },
-  { id: "layers", title: "Layer display", eyebrow: "Map", placement: "left", defaultOpen: false, enabled: true },
+  { id: "search", title: "Plan route", eyebrow: "Plan", placement: "left", defaultOpen: true, enabled: true },
   { id: "location", title: "Current location", eyebrow: "Input", placement: "right", defaultOpen: true, enabled: true },
   { id: "recommendations", title: "Recommendation list", eyebrow: "Output", placement: "right", defaultOpen: true, enabled: true },
   { id: "route", title: "Selected route detail", eyebrow: "Explain", placement: "right", defaultOpen: true, enabled: true },
@@ -92,6 +83,7 @@ export function App() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(DEFAULT_LAYER_VISIBILITY);
   const [openPanels, setOpenPanels] = useState<Record<PanelId, boolean>>(initialPanelState);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<Point | null>(null);
   const [submittedPoint, setSubmittedPoint] = useState<Point | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
@@ -114,16 +106,13 @@ export function App() {
   const panelSummaries = useMemo<Record<PanelId, string>>(
     () => ({
       search: `${form.maxSearchRadiusKm} km radius, ${form.maxDriveTimeMin} min cap`,
-      vehicle: `${form.currentSocPercent}% SOC, ${form.batteryCapacityKwh} kWh battery`,
-      algorithm: `${form.algorithm.toUpperCase()}, snap ${form.maxStartSnapDistanceM}/${form.maxRoadSnapDistanceM} m`,
-      layers: layerSummary(layerVisibility),
       location: selectedPoint ? `${selectedPoint.lat.toFixed(4)}, ${selectedPoint.lng.toFixed(4)}` : "Waiting for map click",
       recommendations: rankedRecommendations.length ? `${rankedRecommendations.length} ranked by ${form.rankingMetric.replace("_", " ")}` : `${form.rankingMetric.replace("_", " ")} ranking`,
       route: selectedRecommendation ? `${formatMetric(selectedRecommendation.drive_time_min)} min, ${formatMetric(selectedRecommendation.distance_km)} km` : "No route selected",
       demoTime: selectedRecommendation ? `${formatMetric(selectedRecommendation.prediction_horizon_min)} min horizon` : "No prediction yet",
       playback: selectedRecommendation ? `${selectedRecommendation.expanded_nodes} expanded nodes` : "No trace yet",
     }),
-    [form, layerVisibility, rankedRecommendations.length, selectedPoint, selectedRecommendation],
+    [form, rankedRecommendations.length, selectedPoint, selectedRecommendation],
   );
 
   function updateForm<T extends keyof FormState>(key: T, value: FormState[T]) {
@@ -249,12 +238,23 @@ export function App() {
                 />
               );
             }
-            if (id === "vehicle") return <VehicleConstraintsPanel form={form} onUpdateForm={updateForm} />;
-            if (id === "algorithm") return <AlgorithmConfigurationPanel form={form} onUpdateForm={updateForm} />;
-            if (id === "layers") return <LayerDisplayPanel layerVisibility={layerVisibility} onUpdateLayer={updateLayer} />;
             return null;
           }}
         />
+        <div className="settings-dock">
+          <button type="button" className="settings-button" aria-expanded={isSettingsOpen} onClick={() => setIsSettingsOpen((current) => !current)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
+              <path d="M19.4 15a8 8 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8.7 8.7 0 0 0-1.7-1l-.3-2.6h-4l-.4 2.6c-.6.2-1.1.6-1.6 1l-2.5-1-2 3.5 2.1 1.5a6.8 6.8 0 0 0 0 2L4.6 17.5l2 3.5 2.5-1c.5.4 1 .7 1.6 1l.4 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5L19.4 15Z" />
+            </svg>
+            <span>Settings</span>
+          </button>
+          {isSettingsOpen && (
+            <div className="settings-popover">
+              <PlannerSettingsPanel form={form} layerVisibility={layerVisibility} onUpdateForm={updateForm} onUpdateLayer={updateLayer} />
+            </div>
+          )}
+        </div>
       </aside>
 
       <section className="map-panel" aria-label="Route planning map">

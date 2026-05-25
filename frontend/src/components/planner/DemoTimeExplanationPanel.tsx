@@ -1,6 +1,6 @@
 import type { RecommendationItem } from "../../types";
 import { EmptyState, Metric, StatusBadge } from "../ui";
-import { DEMO_TIME_RULE, DEMO_WEEK_LABEL } from "./constants";
+import { DEMO_WEEK_LABEL } from "./constants";
 import { formatMetric, formatPercent, formatPredictionTime, occupancyBadge } from "./formatters";
 
 interface DemoTimeExplanationPanelProps {
@@ -19,7 +19,6 @@ export function DemoTimeExplanationPanel({ selectedRecommendation }: DemoTimeExp
       <div className="demo-rule">
         <span>Demo week</span>
         <strong>{DEMO_WEEK_LABEL}</strong>
-        <p>{DEMO_TIME_RULE}</p>
       </div>
       <div className="metric-grid">
         <Metric label="Predicted occupancy" value={formatPercent(selectedRecommendation.predicted_occupancy_rate)} />

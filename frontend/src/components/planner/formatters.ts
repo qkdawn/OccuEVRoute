@@ -1,4 +1,4 @@
-import type { Algorithm, LayerVisibility, RecommendationItem, SearchTraceKind } from "../../types";
+import type { Algorithm, RecommendationItem } from "../../types";
 
 export function algorithmShortLabel(algorithm: Algorithm) {
   if (algorithm === "bidirectional_bfs") return "Bidirectional BFS";
@@ -28,12 +28,7 @@ export function formatPoiSummary(item: RecommendationItem) {
 
 export function formatPredictionTime(value: string | null) {
   if (!value) return "-";
-  return value.replace("T", " ");
-}
-
-export function layerSummary(layerVisibility: LayerVisibility) {
-  const activeCount = Object.values(layerVisibility).filter(Boolean).length;
-  return `${activeCount} of ${Object.keys(layerVisibility).length} layers visible`;
+  return value.replace("T", " ").split(".")[0];
 }
 
 export function occupancyBadge(value: number | null): { label: string; tone: "success" | "warning" | "danger" | "neutral" } {
@@ -41,13 +36,6 @@ export function occupancyBadge(value: number | null): { label: string; tone: "su
   if (value < 0.35) return { label: "Low", tone: "success" };
   if (value <= 0.7) return { label: "Medium", tone: "warning" };
   return { label: "High", tone: "danger" };
-}
-
-export function playbackDescription(kind: SearchTraceKind) {
-  if (kind === "bidirectional") {
-    return "Replay the two road-search frontiers as they expand from the start and station access node.";
-  }
-  return "Replay the explored road area for the selected algorithm without changing the recommendation result.";
 }
 
 export function traceLayerSize(item: RecommendationItem, role: "forward" | "backward") {

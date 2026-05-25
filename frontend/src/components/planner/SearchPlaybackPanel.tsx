@@ -1,6 +1,6 @@
 import type { RecommendationItem } from "../../types";
 import { Button, EmptyState, Metric } from "../ui";
-import { algorithmShortLabel, formatRuntime, playbackDescription, traceLayerSize } from "./formatters";
+import { algorithmShortLabel, formatRuntime, traceLayerSize } from "./formatters";
 
 interface SearchPlaybackPanelProps {
   isPlaybackRunning: boolean;
@@ -25,7 +25,6 @@ export function SearchPlaybackPanel({
 
   return (
     <>
-      <p className="panel-note">{playbackDescription(selectedRecommendation.search_trace.kind)}</p>
       <div className="metric-grid">
         <Metric label="Algorithm" value={algorithmShortLabel(selectedRecommendation.algorithm)} />
         <Metric label="Expanded" value={`${selectedRecommendation.expanded_nodes}`} />

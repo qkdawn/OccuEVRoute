@@ -1,6 +1,4 @@
-import type { Basemap } from "../../types";
-import { Button, NumberField, SelectField } from "../ui";
-import { BASEMAP_LABELS } from "./constants";
+import { Button, NumberField } from "../ui";
 import type { FormState, FormUpdate } from "./types";
 
 interface SearchConfigurationPanelProps {
@@ -14,7 +12,6 @@ interface SearchConfigurationPanelProps {
 export function SearchConfigurationPanel({ canRecommend, form, isLoading, onRecommend, onUpdateForm }: SearchConfigurationPanelProps) {
   return (
     <>
-      <SelectField label="Basemap" value={form.basemap} options={BASEMAP_LABELS} onChange={(value) => onUpdateForm("basemap", value as Basemap)} />
       <NumberField label="Max straight-line radius km" value={form.maxSearchRadiusKm} min={1} max={30} step={0.5} onChange={(value) => onUpdateForm("maxSearchRadiusKm", value)} />
       <NumberField label="Max driving time min" value={form.maxDriveTimeMin} min={5} max={90} step={5} onChange={(value) => onUpdateForm("maxDriveTimeMin", value)} />
       <Button variant="primary" disabled={!canRecommend} loading={isLoading} onClick={onRecommend}>

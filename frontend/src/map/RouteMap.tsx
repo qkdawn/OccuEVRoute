@@ -5,6 +5,7 @@ import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { useEffect, useMemo, useRef } from "react";
 import type { Basemap, BoundaryGeoJson, BoundaryGeometry, LayerVisibility, Point, RecommendationItem, SearchTraceRole } from "../types";
 import { fromMapPoint, toMapPoint } from "./coordinates";
+import { createStationIcon } from "./stationIcons";
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -31,9 +32,9 @@ const BASEMAPS: Record<Basemap, { url: string; attribution: string }> = {
 };
 
 const TRACE_ROLE_STYLES: Record<SearchTraceRole, TraceStyle> = {
-  single: { stroke: "#6d28d9", fill: "#8b5cf6", hullFill: "#8b5cf6" },
-  forward: { stroke: "#0f766e", fill: "#14b8a6", hullFill: "#99f6e4" },
-  backward: { stroke: "#be123c", fill: "#fb7185", hullFill: "#ffe4e6" },
+  single: { stroke: "#0d546c", fill: "#8abbb8", hullFill: "#8abbb8" },
+  forward: { stroke: "#0d546c", fill: "#8abbb8", hullFill: "#8abbb8" },
+  backward: { stroke: "#0d546c", fill: "#8abbb8", hullFill: "#8abbb8" },
 };
 
 interface TraceStyle {
@@ -149,7 +150,7 @@ export function RouteMap({
     if (layerVisibility.boundary) {
       boundaryMaskRef.current = L.polygon(boundaryMaskRings(mapBoundary), {
         color: "transparent",
-        fillColor: "#0f172a",
+        fillColor: "#0d546c",
         fillOpacity: 0.18,
         fillRule: "evenodd",
         interactive: false,
@@ -158,7 +159,7 @@ export function RouteMap({
       boundaryLayerRef.current = L.geoJSON(mapBoundary, {
         interactive: false,
         style: {
-          color: "#0f766e",
+          color: "#5e99a0",
           weight: 2,
           opacity: 0.9,
           fillOpacity: 0,
@@ -197,7 +198,7 @@ export function RouteMap({
         if (item.station_id === null || item.station_latitude === null || item.station_longitude === null) return;
         const isSelected = item.station_id === selectedRecommendation?.station_id;
         const marker = L.marker(toLeaflet(toMapPoint({ lat: item.station_latitude, lng: item.station_longitude }, basemap)), {
-          icon: stationIcon(isSelected),
+          icon: createStationIcon(isSelected, item.charge_count),
           title: item.station_display_name ?? `station_id=${item.station_id}`,
         });
         marker.bindTooltip(stationTooltip(item, index + 1));
@@ -343,9 +344,9 @@ function renderTrace(
     L.polygon(hull.map(toLeaflet), {
       color: colors.stroke,
       weight: 2,
-      opacity: 0.48,
+      opacity: 0.55,
       fillColor: colors.hullFill,
-      fillOpacity: 0.14,
+      fillOpacity: 0.22,
       interactive: false,
     }).addTo(layer);
   }
@@ -392,16 +393,6 @@ function convexHull(points: Point[]): Point[] {
 
 function cross(origin: Point, a: Point, b: Point) {
   return (a.lng - origin.lng) * (b.lat - origin.lat) - (a.lat - origin.lat) * (b.lng - origin.lng);
-}
-
-function stationIcon(selected: boolean) {
-  const color = selected ? "#ef4444" : "#16a34a";
-  return L.divIcon({
-    className: "",
-    html: `<div class="station-marker" style="background:${color}"></div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
 }
 
 function stationTooltip(item: RecommendationItem, rank: number) {
