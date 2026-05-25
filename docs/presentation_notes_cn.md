@@ -108,7 +108,7 @@ def post_csp_check(path_found, distance_km, drive_time_min, constraints):
 
 - **两阶段过滤**：先用静态属性快速剪枝（不跑搜索），再用路网结果精确验证，节省大量计算。
 - **成本函数**：搜索主代价是**行驶时间（分钟）**，而不是距离或金钱，因为用户最关心"多久能充上电"。
-- **最终排序**：后端先合并 ML occupancy prediction，再对通过 post-check 的可行站点做多字段排序。默认 balanced score 是 `drive_time_min + predicted_occupancy_rate * 10`，分数越低越靠前；其中 occupancy 只作为拥挤风险信号，不表示等待时间。也可以切换为最短行驶时间、最短距离、最低预测占用率或最高到达 SOC。代码实现调用 pandas `sort_values`。
+- **最终排序**：后端先合并 ML occupancy prediction，再对通过 post-check 的可行站点做多字段排序。默认 balanced score 是 `drive_time_min / max_drive_time_min + predicted_occupancy_rate`，分数越低越靠前；其中 drive time 先按用户设置的最大行驶时间归一化，occupancy 只作为拥挤风险信号，不表示等待时间。也可以切换为最短行驶时间、最短距离、最低预测占用率或最高到达 SOC。代码实现调用 pandas `sort_values`。
 
 ---
 

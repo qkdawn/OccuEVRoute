@@ -23,56 +23,48 @@
 
 因为 presentation 只有 10 分钟，report 只有约 1500 英文单词，所有章节都应服务主线，不要平均铺开。建议时间和篇幅分配：
 
-| 部分 | PPT 时间 | Report 篇幅 |
-|---|---:|---:|
-| Introduction | 1 min | 150-200 words |
-| Problem Definition | 1.5 min | 220-260 words |
-| Dataset | 1.5 min | 250-300 words |
-| Search Strategy | 2 min | 300-350 words |
-| Machine Learning | 2 min | 300-350 words |
-| Performance | 2 min | 250-300 words |
+| 部分               | PPT 时间 |   Report 篇幅 |
+| ------------------ | -------: | ------------: |
+| Introduction       |    1 min | 150-200 words |
+| Problem Definition |  1.5 min | 220-260 words |
+| Dataset            |  1.5 min | 250-300 words |
+| Search Strategy    |    2 min | 300-350 words |
+| Machine Learning   |    2 min | 300-350 words |
+| Performance        |    2 min | 250-300 words |
 
 Search Strategy 和 Machine Learning 是技术核心，可以多讲；Introduction 和 Problem Definition 要短而清楚。
 
 建议 PPT 控制在 9-11 页：
 
-| 页码 | 内容 |
-|---:|---|
-| 1 | Title + one-sentence project goal |
-| 2 | Motivation / Introduction |
-| 3 | Problem Definition |
-| 4 | Dataset overview |
-| 5 | Route planning workflow |
-| 6 | Search Strategy: BFS → Bi-BFS → CH |
-| 7 | Search Strategy: UCS → A* → ALT A* |
-| 8 | Machine Learning model |
-| 9 | ML results / feature importance |
-| 10 | Performance: search results + ML results + complexity |
-| 11 | Limitations / conclusion, optional if time allows |
+| 页码 | 内容                                                  |
+| ---: | ----------------------------------------------------- |
+|    1 | Title + one-sentence project goal                     |
+|    2 | Motivation / Introduction                             |
+|    3 | Problem Definition                                    |
+|    4 | Dataset overview                                      |
+|    5 | Route planning workflow                               |
+|    6 | Search Strategy: BFS → Bi-BFS → CH                    |
+|    7 | Search Strategy: UCS → A* → ALT A*                    |
+|    8 | Machine Learning model                                |
+|    9 | ML results / feature importance                       |
+|   10 | Performance: search results + ML results + complexity |
+|   11 | Limitations / conclusion, optional if time allows     |
 
 1500-word report 建议只保留 6 个一级小节，每节 1-3 段。不要把代码片段大段放进 report；代码路径可以放在句子里或附录里。
 
-## 推荐使用的技能 / 工作方式
-
-如果使用 AI 辅助写作，最适合使用 `academic-research-suite`，原因是这份任务更像课程项目报告和答辩材料组织，而不是单纯写代码。推荐方式如下：
-
-- 用 `academic-research-suite` 的 academic-paper / outline 思路来统一 report 结构、章节逻辑和学术表达。
-- 用 deep-research 思路补充背景和 related work，但不要把重点写成文献综述；本项目重点是系统设计、算法组合和实验表现。
-- 用 experiment-agent 思路检查 Dataset、Machine Learning、Performance 部分是否说明了数据切分、指标、对照实验和无数据泄漏。
-- 如果要做 PPT，可以先用本文档分配内容，再从 `docs/presentation_notes_cn.md` 提炼每页讲稿。
 
 已有项目资料优先级：
 
-| 资料 | 用途 |
-|---|---|
-| `README.md` | 项目概览、运行方式、数据与模块结构 |
-| `PRODUCT.md` | 产品目标、用户、演示场景 |
-| `docs/presentation_notes_cn.md` | 六个模块的中文讲解稿和代码线索 |
-| `docs/models/occupancy_horizon_model.md` | 机器学习模型、特征、结果 |
-| `docs/figures/` | 模型指标、SHAP、特征重要性等图表 |
-| `src/route_planning/` | 搜索、约束、推荐逻辑 |
-| `src/waiting_prediction/` | 训练、特征构造、模型评估 |
-| `src/data_processing/` | 数据处理、路网、POI、landmark 预处理 |
+| 资料                                     | 用途                                 |
+| ---------------------------------------- | ------------------------------------ |
+| `README.md`                              | 项目概览、运行方式、数据与模块结构   |
+| `PRODUCT.md`                             | 产品目标、用户、演示场景             |
+| `docs/presentation_notes_cn.md`          | 六个模块的中文讲解稿和代码线索       |
+| `docs/models/occupancy_horizon_model.md` | 机器学习模型、特征、结果             |
+| `docs/figures/`                          | 模型指标、SHAP、特征重要性等图表     |
+| `src/route_planning/`                    | 搜索、约束、推荐逻辑                 |
+| `src/waiting_prediction/`                | 训练、特征构造、模型评估             |
+| `src/data_processing/`                   | 数据处理、路网、POI、landmark 预处理 |
 
 ## 章节 1：Introduction
 
@@ -126,7 +118,7 @@ Problem Definition 要把真实问题转成可计算问题，让后面的算法�
   - CSP 不需要单独开一个大章节，建议放在 Problem Definition 里讲“什么叫可行解”，再在 Search Strategy 里讲它如何嵌入路线搜索。
 - 简单讲法是：pre-check 负责约束搜索空间，post-check 负责约束验证，ranking 负责把可行站点按用户当前目标排出优先级。
 - 排序目标：
-  - 默认 balanced：`ml_rank_score = drive_time_min + predicted_occupancy_rate * 10`，分数越低越靠前。这里 `10` 是拥挤风险权重，用来让排序在更短行驶时间和更低拥挤风险之间折中。
+  - 默认 balanced：`ml_rank_score = drive_time_min / max_drive_time_min + predicted_occupancy_rate`，分数越低越靠前。这里先用用户设置的最大行驶时间归一化 drive time，再把 occupancy 作为拥挤风险项加入排序。
   - 可切换为 shortest drive time、shortest distance、lowest predicted occupancy、highest arrival SOC。
   - 实现上后端调用 pandas `sort_values` 做多字段排序；汇报重点讲排序键和业务含义即可。
 
@@ -233,7 +225,7 @@ Search Strategy 要解释系统如何在真实路网上找到候选站路径，�
   - 搜索前运行 pre-check（constraint search），先过滤明显不可行站点，避免对每个站都做昂贵路网搜索。
   - 对每个候选站运行搜索算法。
   - 搜索结果进入 post-check（constraint validation），用真实路径检查 drive time、energy consumption 和 arrival SOC。
-  - 最后做 ranking（multi-key sorting）：默认按 `ml_rank_score = drive_time_min + predicted_occupancy_rate * 10` 排序，也可切换为 drive time、distance、predicted occupancy 或 arrival SOC。occupancy 在这里是拥挤风险信号，不是等待时间。
+  - 最后做 ranking（multi-key sorting）：默认按 `ml_rank_score = drive_time_min / max_drive_time_min + predicted_occupancy_rate` 排序，也可切换为 drive time、distance、predicted occupancy 或 arrival SOC。occupancy 在这里是拥挤风险信号，不是等待时间。
 - BFS：
   - 按层扩展，适合解释基础图搜索。
   - 不考虑边权，不能保证真实行驶时间最短。
@@ -325,11 +317,11 @@ Machine Learning 要说明为什么需要预测占用率、模型预测什么、
 
 当前结果可写：
 
-| Metric | Result |
-|---|---:|
-| Overall R2 | 0.948742 |
-| Overall MAE | 0.024937 |
-| 5 min MAE / R2 | 0.0138 / 0.9790 |
+| Metric           |          Result |
+| ---------------- | --------------: |
+| Overall R2       |        0.948742 |
+| Overall MAE      |        0.024937 |
+| 5 min MAE / R2   | 0.0138 / 0.9790 |
 | 120 min MAE / R2 | 0.0436 / 0.8894 |
 
 建议 PPT 图：
@@ -422,26 +414,26 @@ Performance 要把前面的方法落到结果和取舍上，说明搜索是否�
 
 Report 可以更详细，PPT 要更像讲故事：
 
-| 部分 | Report 写法 | PPT 写法 |
-|---|---|---|
-| Introduction | 背景、动机、系统概览 | 一句话项目 + 流程图 + demo 截图 |
-| Problem Definition | 输入、约束、目标、公式化 | 问题表格 + 两阶段过滤 |
-| Dataset | 来源、规模、处理、切分、防泄漏 | 数据来源表 + 特征类别图 |
-| Search Strategy | 算法原理、复杂度、代码设计 | BFS→Bi-BFS→CH 与 UCS→A*→ALT A* 两组对比 + 路线图 |
-| Machine Learning | 标签、模型、特征、训练、指标 | 输入输出图 + 结果表 + SHAP |
-| Performance | search results、ML results、complexity、limitations | 结果表 + 算法复杂度/取舍图 + limitations |
+| 部分               | Report 写法                                         | PPT 写法                                         |
+| ------------------ | --------------------------------------------------- | ------------------------------------------------ |
+| Introduction       | 背景、动机、系统概览                                | 一句话项目 + 流程图 + demo 截图                  |
+| Problem Definition | 输入、约束、目标、公式化                            | 问题表格 + 两阶段过滤                            |
+| Dataset            | 来源、规模、处理、切分、防泄漏                      | 数据来源表 + 特征类别图                          |
+| Search Strategy    | 算法原理、复杂度、代码设计                          | BFS→Bi-BFS→CH 与 UCS→A*→ALT A* 两组对比 + 路线图 |
+| Machine Learning   | 标签、模型、特征、训练、指标                        | 输入输出图 + 结果表 + SHAP                       |
+| Performance        | search results、ML results、complexity、limitations | 结果表 + 算法复杂度/取舍图 + limitations         |
 
 ## 建议分工
 
 每个负责人交付两类内容：report 段落 + PPT 要点。
 
-| 负责人 | 章节 | 需要交付 |
-|---|---|---|
-| A | Introduction + final story check | 项目概览、系统流程图、demo 截图，并最终检查整份 PPT 叙事是否连贯 |
-| B | Problem Definition + CSP | 输入/约束/目标表，pre-CSP 与 post-CSP 的 feasibility 解释 |
-| C | Dataset | 路网、站点、CH index、POI、UrbanEV 占用率数据来源与处理流程 |
-| D | Search Strategy + search results + complexity | BFS→Bi-BFS→CH 与 UCS→A*→ALT A* 两组搜索策略，说明 CSP 如何嵌入搜索流程，算法图，搜索结果和复杂度取舍 |
-| E | Machine Learning + ML results + limitations | XGBoost 模型、特征、训练切分、防泄漏设计、结果图、ML 指标和 occupancy/ranking 局限 |
+| 负责人 | 章节                                          | 需要交付                                                                                             |
+| ------ | --------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| A      | Introduction + final story check              | 项目概览、系统流程图、demo 截图，并最终检查整份 PPT 叙事是否连贯                                     |
+| B      | Problem Definition + CSP                      | 输入/约束/目标表，pre-CSP 与 post-CSP 的 feasibility 解释                                            |
+| C      | Dataset                                       | 路网、站点、CH index、POI、UrbanEV 占用率数据来源与处理流程                                          |
+| D      | Search Strategy + search results + complexity | BFS→Bi-BFS→CH 与 UCS→A*→ALT A* 两组搜索策略，说明 CSP 如何嵌入搜索流程，算法图，搜索结果和复杂度取舍 |
+| E      | Machine Learning + ML results + limitations   | XGBoost 模型、特征、训练切分、防泄漏设计、结果图、ML 指标和 occupancy/ranking 局限                   |
 
 Performance 不建议单独分给第六个人。5 人版本里，search results 和 complexity 由 D 负责，ML results 和 limitations 由 E 负责，最终 summary 由 A 在整合阶段收口。
 
