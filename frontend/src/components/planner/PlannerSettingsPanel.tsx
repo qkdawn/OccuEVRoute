@@ -22,6 +22,8 @@ export function PlannerSettingsPanel({ form, layerVisibility, onUpdateForm, onUp
 
       <section className="settings-group">
         <h3>Recommendations</h3>
+        <NumberField label="Max radius km" value={form.maxSearchRadiusKm} min={1} max={30} step={0.5} onChange={(value) => onUpdateForm("maxSearchRadiusKm", value)} />
+        <NumberField label="Max driving time min" value={form.maxDriveTimeMin} min={5} max={90} step={5} onChange={(value) => onUpdateForm("maxDriveTimeMin", value)} />
         <NumberField label="Recommendation limit" value={form.maxCandidates} min={3} max={50} step={1} onChange={(value) => onUpdateForm("maxCandidates", value)} />
       </section>
 

@@ -1,22 +1,34 @@
-import { Button, NumberField } from "../ui";
-import type { FormState, FormUpdate } from "./types";
+import { Button } from "../ui";
+import type { Point } from "../../types";
+import { StartSearchField } from "./StartSearchField";
 
 interface SearchConfigurationPanelProps {
   canRecommend: boolean;
-  form: FormState;
   isLoading: boolean;
   onRecommend: () => void;
-  onUpdateForm: FormUpdate;
+  onStartSelect: (point: Point) => void;
+  selectedPoint: Point | null;
+  submittedPoint: Point | null;
 }
 
-export function SearchConfigurationPanel({ canRecommend, form, isLoading, onRecommend, onUpdateForm }: SearchConfigurationPanelProps) {
+export function SearchConfigurationPanel({
+  canRecommend,
+  isLoading,
+  onRecommend,
+  onStartSelect,
+  selectedPoint,
+  submittedPoint,
+}: SearchConfigurationPanelProps) {
   return (
-    <>
-      <NumberField label="Max straight-line radius km" value={form.maxSearchRadiusKm} min={1} max={30} step={0.5} onChange={(value) => onUpdateForm("maxSearchRadiusKm", value)} />
-      <NumberField label="Max driving time min" value={form.maxDriveTimeMin} min={5} max={90} step={5} onChange={(value) => onUpdateForm("maxDriveTimeMin", value)} />
+    <div className="plan-action">
+      <StartSearchField onSelect={onStartSelect} />
+      <div className="plan-action-copy">
+        <strong>{selectedPoint ? `${selectedPoint.lat.toFixed(5)}, ${selectedPoint.lng.toFixed(5)}` : "No start"}</strong>
+        <span>{submittedPoint ? `Last run · ${submittedPoint.lat.toFixed(5)}, ${submittedPoint.lng.toFixed(5)}` : "Pick a start on map"}</span>
+      </div>
       <Button variant="primary" disabled={!canRecommend} loading={isLoading} onClick={onRecommend}>
         Recommend stations
       </Button>
-    </>
+    </div>
   );
 }

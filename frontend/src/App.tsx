@@ -6,7 +6,6 @@ import {
   DemoTimeExplanationPanel,
   type FormState,
   formatMetric,
-  LocationSummaryPanel,
   PlannerSettingsPanel,
   RecommendationListPanel,
   SearchConfigurationPanel,
@@ -15,13 +14,13 @@ import {
   WorkspaceHeader,
 } from "./components/planner";
 import { Panel } from "./components/ui";
+import { pointInBoundary } from "./map/boundary";
 import { RouteMap } from "./map/RouteMap";
 import type { BoundaryGeoJson, LayerVisibility, Point, RankingMetric, RecommendationItem } from "./types";
 
 type PanelPlacement = "left" | "right";
 type PanelId =
   | "search"
-  | "location"
   | "recommendations"
   | "route"
   | "demoTime"
@@ -70,11 +69,10 @@ const EMPTY_RANKING_ORDERS: Record<RankingMetric, number[]> = {
 
 const PANELS: PanelConfig[] = [
   { id: "search", title: "Plan route", eyebrow: "Plan", placement: "left", defaultOpen: true, enabled: true },
-  { id: "location", title: "Current location", eyebrow: "Input", placement: "right", defaultOpen: true, enabled: true },
-  { id: "recommendations", title: "Recommendation list", eyebrow: "Output", placement: "right", defaultOpen: true, enabled: true },
-  { id: "route", title: "Selected route detail", eyebrow: "Explain", placement: "right", defaultOpen: true, enabled: true },
-  { id: "demoTime", title: "Demo time / ML explanation", eyebrow: "Prediction", placement: "right", defaultOpen: false, enabled: true },
-  { id: "playback", title: "Search playback", eyebrow: "Diagnostics", placement: "right", defaultOpen: false, enabled: true },
+  { id: "recommendations", title: "Stations", eyebrow: "Output", placement: "right", defaultOpen: true, enabled: true },
+  { id: "route", title: "Route", eyebrow: "Explain", placement: "right", defaultOpen: true, enabled: true },
+  { id: "demoTime", title: "Demand", eyebrow: "Prediction", placement: "right", defaultOpen: false, enabled: true },
+  { id: "playback", title: "Trace", eyebrow: "Diagnostics", placement: "right", defaultOpen: false, enabled: true },
 ];
 
 const initialPanelState = Object.fromEntries(PANELS.map((panel) => [panel.id, panel.defaultOpen])) as Record<PanelId, boolean>;
@@ -105,14 +103,13 @@ export function App() {
 
   const panelSummaries = useMemo<Record<PanelId, string>>(
     () => ({
-      search: `${form.maxSearchRadiusKm} km radius, ${form.maxDriveTimeMin} min cap`,
-      location: selectedPoint ? `${selectedPoint.lat.toFixed(4)}, ${selectedPoint.lng.toFixed(4)}` : "Waiting for map click",
-      recommendations: rankedRecommendations.length ? `${rankedRecommendations.length} ranked by ${form.rankingMetric.replace("_", " ")}` : `${form.rankingMetric.replace("_", " ")} ranking`,
-      route: selectedRecommendation ? `${formatMetric(selectedRecommendation.drive_time_min)} min, ${formatMetric(selectedRecommendation.distance_km)} km` : "No route selected",
-      demoTime: selectedRecommendation ? `${formatMetric(selectedRecommendation.prediction_horizon_min)} min horizon` : "No prediction yet",
-      playback: selectedRecommendation ? `${selectedRecommendation.expanded_nodes} expanded nodes` : "No trace yet",
+      search: selectedPoint ? `${selectedPoint.lat.toFixed(3)}, ${selectedPoint.lng.toFixed(3)}` : "No start",
+      recommendations: rankedRecommendations.length ? `${rankedRecommendations.length} stations` : form.rankingMetric.replace("_", " "),
+      route: selectedRecommendation ? `${formatMetric(selectedRecommendation.drive_time_min)} min · ${formatMetric(selectedRecommendation.distance_km)} km` : "None",
+      demoTime: selectedRecommendation ? `${formatMetric(selectedRecommendation.prediction_horizon_min)} min` : "None",
+      playback: selectedRecommendation ? `${selectedRecommendation.expanded_nodes} nodes` : "None",
     }),
-    [form, rankedRecommendations.length, selectedPoint, selectedRecommendation],
+    [form.rankingMetric, rankedRecommendations.length, selectedPoint, selectedRecommendation],
   );
 
   function updateForm<T extends keyof FormState>(key: T, value: FormState[T]) {
@@ -137,6 +134,14 @@ export function App() {
     setError(null);
   }
 
+  function handleSearchPointSelect(point: Point) {
+    if (boundary && !pointInBoundary(point, boundary)) {
+      handleInvalidPoint();
+      return;
+    }
+    handlePointChange(point);
+  }
+
   function handleInvalidPoint() {
     setSelectedPoint(null);
     setRecommendations([]);
@@ -145,19 +150,6 @@ export function App() {
     setIsPlaybackRunning(false);
     setSearchPlaybackProgress(1);
     setError("Choose a location inside the Shenzhen boundary.");
-  }
-
-  function resetPlanner() {
-    setForm(DEFAULT_FORM);
-    setLayerVisibility(DEFAULT_LAYER_VISIBILITY);
-    setSelectedPoint(null);
-    setSubmittedPoint(null);
-    setRecommendations([]);
-    setRankingOrders(EMPTY_RANKING_ORDERS);
-    setSelectedStationId(null);
-    setIsPlaybackRunning(false);
-    setSearchPlaybackProgress(1);
-    setError(null);
   }
 
   useEffect(() => {
@@ -220,7 +212,7 @@ export function App() {
   return (
     <main className="app-shell">
       <aside className="control-panel">
-        <WorkspaceHeader onReset={resetPlanner} />
+        <WorkspaceHeader />
         <PanelRenderer
           placement="left"
           openPanels={openPanels}
@@ -230,11 +222,12 @@ export function App() {
             if (id === "search") {
               return (
                 <SearchConfigurationPanel
-                  form={form}
                   isLoading={isLoading}
                   canRecommend={Boolean(selectedPoint)}
                   onRecommend={handleRecommend}
-                  onUpdateForm={updateForm}
+                  onStartSelect={handleSearchPointSelect}
+                  selectedPoint={selectedPoint}
+                  submittedPoint={submittedPoint}
                 />
               );
             }
@@ -244,8 +237,12 @@ export function App() {
         <div className="settings-dock">
           <button type="button" className="settings-button" aria-expanded={isSettingsOpen} onClick={() => setIsSettingsOpen((current) => !current)}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
-              <path d="M19.4 15a8 8 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8.7 8.7 0 0 0-1.7-1l-.3-2.6h-4l-.4 2.6c-.6.2-1.1.6-1.6 1l-2.5-1-2 3.5 2.1 1.5a6.8 6.8 0 0 0 0 2L4.6 17.5l2 3.5 2.5-1c.5.4 1 .7 1.6 1l.4 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5L19.4 15Z" />
+              <path d="M4 7h10" />
+              <path d="M18 7h2" />
+              <path d="M4 17h2" />
+              <path d="M10 17h10" />
+              <circle cx="16" cy="7" r="2" />
+              <circle cx="8" cy="17" r="2" />
             </svg>
             <span>Settings</span>
           </button>
@@ -285,7 +282,6 @@ export function App() {
           panelSummaries={panelSummaries}
           onTogglePanel={togglePanel}
           renderPanel={(id) => {
-            if (id === "location") return <LocationSummaryPanel selectedPoint={selectedPoint} submittedPoint={submittedPoint} />;
             if (id === "recommendations") {
               return (
                 <RecommendationListPanel

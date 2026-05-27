@@ -4,6 +4,7 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { useEffect, useMemo, useRef } from "react";
 import type { Basemap, BoundaryGeoJson, BoundaryGeometry, LayerVisibility, Point, RecommendationItem, SearchTraceRole } from "../types";
+import { pointInBoundary } from "./boundary";
 import { fromMapPoint, toMapPoint } from "./coordinates";
 import { createStationIcon } from "./stationIcons";
 
@@ -201,7 +202,12 @@ export function RouteMap({
           icon: createStationIcon(isSelected, item.charge_count),
           title: item.station_display_name ?? `station_id=${item.station_id}`,
         });
-        marker.bindTooltip(stationTooltip(item, index + 1));
+        marker.bindPopup(stationPopup(item, index + 1), {
+          className: "station-popup",
+          closeButton: false,
+          maxWidth: 260,
+          offset: [0, -8],
+        });
         marker.on("click", () => onStationSelect(item.station_id as number));
         marker.addTo(stationLayerRef.current as L.LayerGroup);
       });
@@ -395,23 +401,35 @@ function cross(origin: Point, a: Point, b: Point) {
   return (a.lng - origin.lng) * (b.lat - origin.lat) - (a.lat - origin.lat) * (b.lng - origin.lng);
 }
 
-function stationTooltip(item: RecommendationItem, rank: number) {
-  const arrival = item.arrival_soc === null ? "" : `${(item.arrival_soc * 100).toFixed(1)}%`;
-  const snap = item.road_snap_distance_m === null ? "" : item.road_snap_distance_m.toFixed(1);
+function stationPopup(item: RecommendationItem, rank: number) {
+  const stationName = escapeHtml(item.station_display_name ?? `Station ${item.station_id}`);
+  const occupancy = formatPercent(item.predicted_occupancy_rate);
+  const arrival = item.arrival_soc === null ? "-" : `${(item.arrival_soc * 100).toFixed(1)}%`;
+  const snap = item.road_snap_distance_m === null ? "-" : `${item.road_snap_distance_m.toFixed(0)} m`;
+
   return (
-    `Top ${rank} | ${item.station_display_name ?? `station_id: ${item.station_id}`}<br>` +
-    `drive_time_min: ${formatMetric(item.drive_time_min)}<br>` +
-    `distance_km: ${formatMetric(item.distance_km)}<br>` +
-    `predicted_occupancy: ${formatPercent(item.predicted_occupancy_rate)}<br>` +
-    `road_snap_distance_m: ${snap}<br>` +
-    `charge_count: ${item.charge_count ?? ""}<br>` +
-    `nearby_poi: ${formatPoiSummary(item)}<br>` +
-    `arrival_soc: ${arrival}`
+    `<div class="station-popup-card">` +
+    `<div class="station-popup-head">` +
+    `<span>Top ${rank}</span>` +
+    `<strong>${stationName}</strong>` +
+    `</div>` +
+    `<div class="station-popup-grid">` +
+    stationPopupMetric("Time", `${formatMetric(item.drive_time_min)} min`) +
+    stationPopupMetric("Distance", `${formatMetric(item.distance_km)} km`) +
+    stationPopupMetric("Occupancy", occupancy || "-") +
+    stationPopupMetric("Arrival", arrival) +
+    `</div>` +
+    `<div class="station-popup-foot">` +
+    `<span>${item.charge_count ?? "-"} chargers</span>` +
+    `<span>${snap} snap</span>` +
+    `<span>${formatPoiSummary(item) || "-"} POI</span>` +
+    `</div>` +
+    `</div>`
   );
 }
 
 function formatMetric(value: number | null) {
-  return value === null ? "" : value.toFixed(2);
+  return value === null ? "-" : value.toFixed(2);
 }
 
 function formatPercent(value: number | null) {
@@ -421,6 +439,23 @@ function formatPercent(value: number | null) {
 function formatPoiSummary(item: RecommendationItem) {
   if (item.poi_total_count === null) return "";
   return `${item.poi_total_count} / ${item.poi_lifestyle_services_count ?? 0} / ${item.poi_food_beverage_count ?? 0} / ${item.poi_business_residential_count ?? 0}`;
+}
+
+function stationPopupMetric(label: string, value: string) {
+  return `<span><small>${label}</small><strong>${value}</strong></span>`;
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[char];
+  });
 }
 
 function boundaryToMapGeoJson(boundary: BoundaryGeoJson, basemap: Basemap): BoundaryGeoJson {
@@ -502,29 +537,3 @@ function extendBoundsWithRing(bounds: L.LatLngBounds, ring: number[][]) {
   });
 }
 
-function pointInBoundary(point: Point, boundary: BoundaryGeoJson): boolean {
-  return boundary.features.some((feature) => pointInGeometry(point, feature.geometry));
-}
-
-function pointInGeometry(point: Point, geometry: BoundaryGeometry): boolean {
-  if (geometry.type === "Polygon") return pointInPolygon(point, geometry.coordinates);
-  return geometry.coordinates.some((polygon) => pointInPolygon(point, polygon));
-}
-
-function pointInPolygon(point: Point, polygon: number[][][]): boolean {
-  if (!polygon.length || !pointInRing(point, polygon[0])) return false;
-  return !polygon.slice(1).some((hole) => pointInRing(point, hole));
-}
-
-function pointInRing(point: Point, ring: number[][]): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const xi = ring[i][0];
-    const yi = ring[i][1];
-    const xj = ring[j][0];
-    const yj = ring[j][1];
-    const intersects = yi > point.lat !== yj > point.lat && point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}

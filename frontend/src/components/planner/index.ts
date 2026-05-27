@@ -1,6 +1,5 @@
 export { DemoTimeExplanationPanel } from "./DemoTimeExplanationPanel";
 export { algorithmShortLabel, formatMetric } from "./formatters";
-export { LocationSummaryPanel } from "./LocationSummaryPanel";
 export { PlannerSettingsPanel } from "./PlannerSettingsPanel";
 export { RecommendationListPanel } from "./RecommendationListPanel";
 export { SearchConfigurationPanel } from "./SearchConfigurationPanel";

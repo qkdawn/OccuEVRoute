@@ -86,6 +86,12 @@ export interface RecommendationResponse {
   ranking_orders: Record<RankingMetric, number[]>;
 }
 
+export interface LocationSearchResult {
+  label: string;
+  lat: number;
+  lng: number;
+}
+
 export type BoundaryGeometry =
   | {
       type: "Polygon";
