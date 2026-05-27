@@ -9,7 +9,6 @@ export function WorkspaceHeader() {
       <div className="workspace-title">
         <p className="eyebrow">EV charging route planner</p>
         <h1>OccuEVRoute</h1>
-        <span>Shenzhen charging station recommendation</span>
       </div>
     </header>
   );

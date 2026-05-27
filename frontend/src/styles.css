@@ -190,7 +190,7 @@ select:focus-visible {
 
 .workspace-title {
   display: grid;
-  gap: 3px;
+  gap: 5px;
   min-width: 0;
 }
 
