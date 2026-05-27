@@ -65,6 +65,12 @@ Install backend/runtime dependencies:
 python -m pip install -r backend/requirements.txt
 ```
 
+Install test and lint tooling when you need local checks:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
 Backend:
 
 ```powershell
@@ -93,7 +99,7 @@ Route recommendation uses the enhanced road network by default:
 - `data/processed/shenzhen_boundary.geojson`
 
 To regenerate data from source inputs, install the full data-processing
-environment:
+and model-training environment:
 
 ```powershell
 python -m pip install -r requirements.txt
