@@ -98,6 +98,22 @@ Route recommendation uses the enhanced road network by default:
 - `data/processed/station_poi_features.csv`
 - `data/processed/shenzhen_boundary.geojson`
 
+The demo occupancy predictor reads a compact committed runtime bundle by
+default:
+
+- `data/runtime/occupancy_week/station-processed/*.csv.gz`
+- `data/runtime/occupancy_week/station-processed/features/station_inf.csv`
+- `data/runtime/occupancy_week/station-processed/features/station_profiles.csv`
+- `data/runtime/occupancy_week/weather_central.csv`
+
+This bundle contains the February 6-12, 2023 simulation week plus compact
+precomputed station profile features, so the app can run without the full
+`ML/Data/` source dataset. To rebuild it from the full source data, run:
+
+```powershell
+python src/data_processing/extract_runtime_occupancy_week.py
+```
+
 To regenerate data from source inputs, install the full data-processing
 and model-training environment:
 

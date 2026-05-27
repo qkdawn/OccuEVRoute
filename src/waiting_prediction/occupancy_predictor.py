@@ -22,7 +22,7 @@ import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_STATION_DIR = (
+FULL_STATION_DIR = (
     PROJECT_ROOT
     / "ML"
     / "Data"
@@ -30,7 +30,7 @@ DEFAULT_STATION_DIR = (
     / "UrbanEVDataset"
     / "20220901-20230228_station-processed"
 )
-DEFAULT_WEATHER_FILE = (
+FULL_WEATHER_FILE = (
     PROJECT_ROOT
     / "ML"
     / "Data"
@@ -38,6 +38,9 @@ DEFAULT_WEATHER_FILE = (
     / "UrbanEVSupplemental"
     / "20220901-20230228_weather_central.csv"
 )
+RUNTIME_OCCUPANCY_DIR = PROJECT_ROOT / "data" / "runtime" / "occupancy_week"
+DEFAULT_STATION_DIR = RUNTIME_OCCUPANCY_DIR / "station-processed"
+DEFAULT_WEATHER_FILE = RUNTIME_OCCUPANCY_DIR / "weather_central.csv"
 DEFAULT_MODEL_FILE = PROJECT_ROOT / "models" / "occupancy_horizon_xgboost.pkl"
 DEFAULT_FEATURE_FILE = PROJECT_ROOT / "models" / "occupancy_horizon_features.json"
 DEFAULT_POI_FILE = PROJECT_ROOT / "data" / "processed" / "station_poi_features.csv"
@@ -312,6 +315,8 @@ def _prefixed_time_features(value: pd.Timestamp, prefix: str) -> dict[str, float
 def _station_frame(station_dir: Path, station_id: int) -> pd.DataFrame:
     path = station_dir / f"{station_id}.csv"
     if not path.exists():
+        path = station_dir / f"{station_id}.csv.gz"
+    if not path.exists():
         return pd.DataFrame()
     frame = pd.read_csv(
         path,
@@ -391,6 +396,10 @@ def _station_profiles(
     hour: int,
     weekday: int | None = None,
 ) -> dict[str, float]:
+    precomputed = _precomputed_station_profile(station_dir, station_id, hour, weekday)
+    if precomputed is not None:
+        return precomputed
+
     frame = _station_frame(station_dir, station_id)
     train = frame[frame["time"] < cutoff_time]
     if train.empty:
@@ -420,6 +429,41 @@ def _station_profiles(
         else hour_avg,
         "global_same_hour_occupancy": hour_avg,
     }
+
+
+@lru_cache(maxsize=4096)
+def _precomputed_station_profile(
+    station_dir: Path,
+    station_id: int,
+    hour: int,
+    weekday: int | None,
+) -> dict[str, float] | None:
+    profiles_file = station_dir / "features" / "station_profiles.csv"
+    if not profiles_file.exists():
+        return None
+    profiles = _station_profile_table(profiles_file)
+    profile_weekday = -1 if weekday is None else int(weekday)
+    match = profiles[
+        (profiles["station_id"] == int(station_id))
+        & (profiles["hour"] == int(hour))
+        & (profiles["weekday"] == profile_weekday)
+    ]
+    if match.empty:
+        return None
+    row = match.iloc[0]
+    return {
+        "station_avg_occupancy": float(row["station_avg_occupancy"]),
+        "station_peak_avg_occupancy": float(row["station_peak_avg_occupancy"]),
+        "station_avg_duration": float(row["station_avg_duration"]),
+        "station_same_hour_occupancy": float(row["station_same_hour_occupancy"]),
+        "station_same_weekday_hour_occupancy": float(row["station_same_weekday_hour_occupancy"]),
+        "global_same_hour_occupancy": float(row["global_same_hour_occupancy"]),
+    }
+
+
+@lru_cache(maxsize=4)
+def _station_profile_table(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path)
 
 
 def _load_poi_features(path: Path) -> pd.DataFrame:
