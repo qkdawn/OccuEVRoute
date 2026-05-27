@@ -33,9 +33,9 @@ const BASEMAPS: Record<Basemap, { url: string; attribution: string }> = {
 };
 
 const TRACE_ROLE_STYLES: Record<SearchTraceRole, TraceStyle> = {
-  single: { stroke: "#0d546c", fill: "#8abbb8", hullFill: "#8abbb8" },
-  forward: { stroke: "#0d546c", fill: "#8abbb8", hullFill: "#8abbb8" },
-  backward: { stroke: "#0d546c", fill: "#8abbb8", hullFill: "#8abbb8" },
+  single: { stroke: "#0f766e", fill: "#5eead4", hullFill: "#99f6e4" },
+  forward: { stroke: "#2563eb", fill: "#93c5fd", hullFill: "#bfdbfe" },
+  backward: { stroke: "#b45309", fill: "#fbbf24", hullFill: "#fde68a" },
 };
 
 interface TraceStyle {
