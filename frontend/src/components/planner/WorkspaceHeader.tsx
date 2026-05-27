@@ -1,9 +1,15 @@
 export function WorkspaceHeader() {
   return (
     <header className="workspace-header">
-      <div>
-        <p className="eyebrow">OccuEVRoute</p>
-        <h1>EV charging route planner</h1>
+      <div className="workspace-mark" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="workspace-title">
+        <p className="eyebrow">EV charging route planner</p>
+        <h1>OccuEVRoute</h1>
+        <span>Shenzhen charging station recommendation</span>
       </div>
     </header>
   );
