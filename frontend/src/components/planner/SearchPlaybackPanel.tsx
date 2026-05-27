@@ -20,7 +20,7 @@ export function SearchPlaybackPanel({
   selectedRecommendation,
 }: SearchPlaybackPanelProps) {
   if (!selectedRecommendation) {
-    return <EmptyState title="No search trace yet" message="Run a recommendation to inspect expanded nodes and runtime." />;
+    return <EmptyState title="No trace" message="Run the planner." />;
   }
 
   return (

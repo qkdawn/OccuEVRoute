@@ -8,7 +8,7 @@ interface SelectedRoutePanelProps {
 
 export function SelectedRoutePanel({ selectedRecommendation }: SelectedRoutePanelProps) {
   if (!selectedRecommendation) {
-    return <EmptyState title="No selected route" message="Recommendation details will appear here after a successful planner run." />;
+    return <EmptyState title="No route" message="Select a station." />;
   }
 
   return (

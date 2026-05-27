@@ -9,7 +9,7 @@ interface DemoTimeExplanationPanelProps {
 
 export function DemoTimeExplanationPanel({ selectedRecommendation }: DemoTimeExplanationPanelProps) {
   if (!selectedRecommendation) {
-    return <EmptyState title="No ML prediction yet" message="Run a recommendation to inspect the historical-time occupancy prediction for the selected station." />;
+    return <EmptyState title="No prediction" message="Run the planner." />;
   }
 
   const occupancy = occupancyBadge(selectedRecommendation.predicted_occupancy_rate);

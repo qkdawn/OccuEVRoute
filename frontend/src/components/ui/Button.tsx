@@ -18,6 +18,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const classes = ["ui-button", `ui-button-${variant}`, className].filter(Boolean).join(" ");
+
   return (
     <button type={type} className={classes} disabled={disabled || loading} {...props}>
       {loading ? "Calculating recommendations..." : children}

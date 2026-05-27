@@ -1,4 +1,5 @@
 import type { RankingMetric, RecommendationItem } from "../../types";
+import AnimatedList from "../AnimatedList";
 import { EmptyState, SelectField, StatusBadge } from "../ui";
 import { RANKING_METRIC_LABELS } from "./constants";
 import { algorithmShortLabel, formatMetric, occupancyBadge } from "./formatters";
@@ -24,9 +25,9 @@ export function RecommendationListPanel({ form, onStationSelect, onUpdateForm, r
         />
       </div>
       {!recommendations.length ? (
-        <EmptyState title="No recommendations yet" message="Choose a location and run the planner to populate ranked charging stations." />
+        <EmptyState title="No feasible stations" message="Try a road-side start or loosen settings." />
       ) : (
-        <div className="ranking-list">
+        <AnimatedList className="ranking-list" resetKey={recommendations.map((item) => item.station_id).join("-")}>
           {recommendations.map((item, index) => {
             const occupancy = occupancyBadge(item.predicted_occupancy_rate);
             return (
@@ -61,7 +62,7 @@ export function RecommendationListPanel({ form, onStationSelect, onUpdateForm, r
               </button>
             );
           })}
-        </div>
+        </AnimatedList>
       )}
     </>
   );

@@ -1,0 +1,33 @@
+.animated-list,
+.animated-list-item {
+  display: grid;
+  min-width: 0;
+}
+
+.animated-list-item {
+  position: relative;
+}
+
+.animated-list-item::before {
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+  background: linear-gradient(90deg, rgba(94, 153, 160, 0.18), transparent 58%);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  animation: recommendation-entry-sheen 720ms ease-out both;
+  animation-delay: var(--sheen-delay, 0ms);
+}
+
+@keyframes recommendation-entry-sheen {
+  0% {
+    opacity: 0.9;
+    transform: translateX(-10px);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}

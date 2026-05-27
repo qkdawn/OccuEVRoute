@@ -16,9 +16,8 @@ export function Panel({ children, eyebrow, isOpen, onToggle, summary, title }: P
         <span>
           <small>{eyebrow}</small>
           <strong>{title}</strong>
-          {!isOpen && <em>{summary}</em>}
         </span>
-        <span className="panel-indicator" aria-hidden="true" />
+        <em>{summary}</em>
       </button>
       {isOpen && <div className="panel-body">{children}</div>}
     </section>
