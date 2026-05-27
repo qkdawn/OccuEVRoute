@@ -37,10 +37,18 @@ data package from GitHub Releases:
 
 - [occuevroute-processed-data-2026-05-22.zip](https://github.com/qkdawn/OccuEVRoute/releases/download/data-v2026-05-22/occuevroute-processed-data-2026-05-22.zip)
 
-Extract the zip so the files sit directly under `data/processed/`, then verify:
+The occupancy predictor also expects the compact simulation-week runtime bundle
+under `data/runtime/occupancy_week/`. Download it from the same release:
+
+- [occuevroute-occupancy-runtime-week-2023-02-06.zip](https://github.com/qkdawn/OccuEVRoute/releases/download/data-v2026-05-22/occuevroute-occupancy-runtime-week-2023-02-06.zip)
+
+Extract the processed data zip so its files sit directly under `data/processed/`.
+Extract the occupancy runtime zip under `data/runtime/` so it creates
+`data/runtime/occupancy_week/`, then verify:
 
 ```powershell
 python scripts/check_route_data.py
+python scripts/check_runtime_data.py
 ```
 
 Start the app:
@@ -98,8 +106,7 @@ Route recommendation uses the enhanced road network by default:
 - `data/processed/station_poi_features.csv`
 - `data/processed/shenzhen_boundary.geojson`
 
-The demo occupancy predictor reads a compact committed runtime bundle by
-default:
+The demo occupancy predictor reads a compact runtime bundle by default:
 
 - `data/runtime/occupancy_week/station-processed/*.csv.gz`
 - `data/runtime/occupancy_week/station-processed/features/station_inf.csv`
@@ -108,7 +115,9 @@ default:
 
 This bundle contains the February 6-12, 2023 simulation week plus compact
 precomputed station profile features, so the app can run without the full
-`ML/Data/` source dataset. To rebuild it from the full source data, run:
+`ML/Data/` source dataset. It is published as
+`occuevroute-occupancy-runtime-week-2023-02-06.zip` on the `data-v2026-05-22`
+GitHub Release. To rebuild it from the full source data, run:
 
 ```powershell
 python src/data_processing/extract_runtime_occupancy_week.py
@@ -144,11 +153,13 @@ Large raw datasets remain under `ML/Data/`.
 
 ## Release Data Package
 
-Processed route data should be published as a GitHub Release asset rather than
-committed to the repository. The current local package is:
+Processed route data and compact runtime occupancy data should be published as
+GitHub Release assets rather than committed to the repository. The current local
+packages are:
 
 ```text
 release/occuevroute-processed-data-2026-05-22.zip
+release/occuevroute-occupancy-runtime-week-2023-02-06.zip
 ```
 
 It is published on the `data-v2026-05-22` GitHub Release:
