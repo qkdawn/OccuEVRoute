@@ -35,12 +35,12 @@ The app expects route-planning artifacts under `data/processed/`. These files ar
 not committed to Git because they are generated and large. Download the processed
 data package from GitHub Releases:
 
-- [occuevroute-processed-data-2026-05-22.zip](https://github.com/qkdawn/OccuEVRoute/releases/download/data-v2026-05-22/occuevroute-processed-data-2026-05-22.zip)
+- [occuevroute-processed-data-2026-05-27.zip](https://github.com/qkdawn/OccuEVRoute/releases/download/data-v2026-05-27/occuevroute-processed-data-2026-05-27.zip)
 
 The occupancy predictor also expects the compact simulation-week runtime bundle
 under `data/runtime/occupancy_week/`. Download it from the same release:
 
-- [occuevroute-occupancy-runtime-week-2023-02-06.zip](https://github.com/qkdawn/OccuEVRoute/releases/download/data-v2026-05-22/occuevroute-occupancy-runtime-week-2023-02-06.zip)
+- [occuevroute-occupancy-runtime-week-2023-02-06.zip](https://github.com/qkdawn/OccuEVRoute/releases/download/data-v2026-05-27/occuevroute-occupancy-runtime-week-2023-02-06.zip)
 
 Extract the processed data zip so its files sit directly under `data/processed/`.
 Extract the occupancy runtime zip under `data/runtime/` so it creates
@@ -116,7 +116,7 @@ The demo occupancy predictor reads a compact runtime bundle by default:
 This bundle contains the February 6-12, 2023 simulation week plus compact
 precomputed station profile features, so the app can run without the full
 `ML/Data/` source dataset. It is published as
-`occuevroute-occupancy-runtime-week-2023-02-06.zip` on the `data-v2026-05-22`
+`occuevroute-occupancy-runtime-week-2023-02-06.zip` on the `data-v2026-05-27`
 GitHub Release. To rebuild it from the full source data, run:
 
 ```powershell
@@ -158,14 +158,14 @@ GitHub Release assets rather than committed to the repository. The current local
 packages are:
 
 ```text
-release/occuevroute-processed-data-2026-05-22.zip
+release/occuevroute-processed-data-2026-05-27.zip
 release/occuevroute-occupancy-runtime-week-2023-02-06.zip
 ```
 
-It is published on the `data-v2026-05-22` GitHub Release:
+It is published on the `data-v2026-05-27` GitHub Release:
 
 ```text
-https://github.com/qkdawn/OccuEVRoute/releases/tag/data-v2026-05-22
+https://github.com/qkdawn/OccuEVRoute/releases/tag/data-v2026-05-27
 ```
 
 ## Occupancy Prediction
