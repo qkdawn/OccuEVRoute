@@ -95,5 +95,11 @@ class RecommendationResponse(BaseModel):
     ranking_orders: dict[RankingMetric, list[int]]
 
 
+class LocationSearchResult(BaseModel):
+    label: str
+    lat: float
+    lng: float
+
+
 class HealthResponse(BaseModel):
     status: str

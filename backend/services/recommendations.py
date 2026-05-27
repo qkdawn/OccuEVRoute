@@ -109,8 +109,9 @@ def recommend(request: RecommendationRequest) -> RecommendationResponse:
     )
     results = _merge_poi_features(results)
     results = _merge_occupancy_predictions(results, request)
-    ranking_orders = _build_ranking_orders(results, request.top_k)
-    ordered_results = _sort_recommendations(results, request.ranking_metric).head(request.top_k).reset_index(drop=True)
+    feasible_results = _feasible_results(results)
+    ranking_orders = _build_ranking_orders(feasible_results, request.top_k)
+    ordered_results = _sort_recommendations(feasible_results, request.ranking_metric).head(request.top_k).reset_index(drop=True)
     return RecommendationResponse(
         recommendations=[_row_to_item(row) for _, row in ordered_results.iterrows()],
         ranking_orders=ranking_orders,
@@ -192,6 +193,12 @@ def _build_ranking_orders(results: pd.DataFrame, top_k: int) -> dict[str, list[i
         ]
         for metric in RANKING_METRICS
     }
+
+
+def _feasible_results(results: pd.DataFrame) -> pd.DataFrame:
+    if results.empty or "passed_constraints" not in results.columns:
+        return results
+    return results[results["passed_constraints"]].copy().reset_index(drop=True)
 
 
 def _sort_recommendations(results: pd.DataFrame, ranking_metric: str) -> pd.DataFrame:
