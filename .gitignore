@@ -24,6 +24,8 @@ data/raw/
 data/sample/
 data/bundles/
 models/*
+!models/occupancy_horizon_xgboost.pkl
+!models/occupancy_horizon_features.json
 
 # Archives
 *.zip
