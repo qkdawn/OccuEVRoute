@@ -64,23 +64,23 @@ Design APIs so callers receive useful domain results instead of needing to recon
 - Do not hide algorithm explanation entirely; it is part of the course-demo value.
 - Do not introduce a large UI framework unless the existing implementation clearly cannot support the required workflow.
 
-## Docker Workflow
+## Vite Launch Workflow
 
-Docker is the default demo packaging path. Keep it boring, reproducible, and aligned with the local development ports:
+Vite is the default demo path. Keep it boring, local, and aligned with the documented ports:
 
-- `Dockerfile.backend` owns the FastAPI runtime image. It installs only `backend/requirements.txt`, copies `backend/` and `src/`, exposes port `8000`, and serves `backend.main:app` with Uvicorn.
-- `frontend/Dockerfile` owns the production frontend image. It builds the Vite app in a Node stage, then serves `dist/` with `frontend/server.mjs`. Do not use `vite preview` as the production container runtime.
-- `frontend/server.mjs` owns container-time frontend routing. Static assets are served directly, client routes fall back to `index.html`, and `/api/` is reverse-proxied to `BACKEND_ORIGIN` with a default of `http://backend:8000`.
-- `docker-compose.yml` is the local demo orchestrator. It publishes backend `9000:8000` and frontend `9090:80`, mounts `data/`, `models/`, and `ML/Data/` read-only into the backend, sets `BACKEND_ORIGIN=http://backend:8000`, and should keep frontend startup dependent on a healthy backend.
-- Keep large/generated data out of images. Route artifacts should be present on the host under `data/processed/` and mounted at runtime; model artifacts should be present under `models/`.
+- `start-occuevroute.bat` owns the one-click Windows demo launch. It starts FastAPI on `127.0.0.1:9000`, starts the Vite deployment preview on `127.0.0.1:9090`, and opens the browser.
+- `frontend/vite.config.ts` owns both frontend runtimes. The dev server uses port `5173`; the preview deployment uses port `9090`; both proxy `/api` to `http://127.0.0.1:9000`.
+- `frontend/package.json` owns frontend commands. `npm run dev` is for hot-reload development, and `npm run deploy` builds the app then serves it with Vite preview.
+- The backend runs directly with Uvicorn: `python -m uvicorn backend.main:app --host 127.0.0.1 --port 9000`.
+- Route artifacts should be present under `data/processed/`; model artifacts should be present under `models/`.
 
-When changing Docker behavior, verify in this order:
+When changing launch or deployment behavior, verify in this order:
 
-1. `docker compose config`
-2. `docker compose build`
-3. `docker compose up`
-4. `Invoke-RestMethod http://localhost:9000/api/health`
-5. Open `http://localhost:9090` and confirm the frontend can call `/api/boundary`.
+1. `.\start-occuevroute.bat --check`
+2. `npm run lint` from `frontend/`
+3. `npm run build` from `frontend/`
+4. `npm run preview` from `frontend/`, then open `http://127.0.0.1:9090`
+5. With the backend running, confirm `Invoke-RestMethod http://127.0.0.1:9000/api/health` and that the frontend can call `/api/boundary`.
 
 ## APOSD Red Flags
 
@@ -101,7 +101,7 @@ After every implementation, perform a cleanup pass before reporting completion. 
 1. Review the diff for the files you touched. Remove dead code, obsolete branches, fallback paths that are no longer reachable, temporary debug output, one-off scripts, unused imports, duplicated constants, and CSS or UI states left over from earlier attempts.
 2. Check for temporary artifacts created during the task. Delete scratch files, local exports, generated previews, cache folders, and intermediate assets unless they are intentional project outputs. Do not delete large project data, model artifacts, or user-created files.
 3. Format only the files you changed, using the repository's existing formatter or build tooling. Avoid broad mechanical rewrites when the project does not already enforce them.
-4. Run the smallest relevant verification available for the change. Prefer targeted tests first, then broader checks when the touched surface includes shared behavior, API contracts, Docker packaging, or frontend workflows.
+4. Run the smallest relevant verification available for the change. Prefer targeted tests first, then broader checks when the touched surface includes shared behavior, API contracts, launch tooling, or frontend workflows.
 5. Re-check `git diff` and `git status --short` after cleanup. Confirm the final diff contains only intentional changes and no unrelated user work was reverted or overwritten.
 6. If a cleanup or verification step cannot run, say so in the final response with the reason and the remaining risk.
 

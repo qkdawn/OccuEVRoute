@@ -3,8 +3,8 @@
 This directory holds local data files. Large generated artifacts are not tracked
 by Git.
 
-- `processed/`: Runtime route-planning artifacts used directly by Docker, the
-  FastAPI backend, and the CLI.
+- `processed/`: Runtime route-planning artifacts used directly by the FastAPI
+  backend, Vite-served app, and CLI.
 - `external/`: OSMnx/OpenStreetMap downloads and road-network cache files used
   to regenerate `processed/`.
 - `raw/`, `interim/`, `sample/`, `bundles/`: Optional local working folders for

@@ -51,6 +51,24 @@ python scripts/check_route_data.py
 python scripts/check_runtime_data.py
 ```
 
+Start everything with the Windows launcher:
+
+```powershell
+.\start-occuevroute.bat
+```
+
+The launcher opens one backend window, one Vite deployment window, and then opens
+`http://127.0.0.1:9090` in your browser. Vite serves the built frontend and
+proxies `/api` requests to `http://127.0.0.1:9000`.
+
+To sanity-check that Python and npm are available without starting the app:
+
+```powershell
+.\start-occuevroute.bat --check
+```
+
+### Manual startup
+
 Install backend dependencies:
 
 ```powershell
@@ -72,8 +90,7 @@ npm install
 npm run deploy
 ```
 
-Then open `http://localhost:9090`. Vite serves the built frontend and proxies
-`/api` requests to `http://127.0.0.1:9000`.
+Then open `http://localhost:9090`.
 
 The backend smoke test is:
 
