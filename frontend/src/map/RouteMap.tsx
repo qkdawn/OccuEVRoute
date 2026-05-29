@@ -429,6 +429,9 @@ function visibleRouteCoordinates(coordinates: [number, number][], progress: numb
 }
 
 interface TraceRenderOptions {
+  hullAroundFrontier: boolean;
+  hullDashArray?: string;
+  hullFillOpacity: number;
   pointLimit: number;
   showEdges: boolean;
   showHull: boolean;
@@ -436,7 +439,14 @@ interface TraceRenderOptions {
 
 function chTraceOptions(isChTrace: boolean): TraceRenderOptions | undefined {
   if (!isChTrace) return undefined;
-  return { pointLimit: CH_FRONTIER_POINT_LIMIT, showEdges: false, showHull: false };
+  return {
+    hullAroundFrontier: true,
+    hullDashArray: "5,5",
+    hullFillOpacity: 0,
+    pointLimit: CH_FRONTIER_POINT_LIMIT,
+    showEdges: false,
+    showHull: true,
+  };
 }
 
 function renderTrace(
@@ -445,7 +455,7 @@ function renderTrace(
   progress: number,
   basemap: Basemap,
   colors: TraceStyle,
-  options: TraceRenderOptions = { pointLimit: 18, showEdges: true, showHull: true },
+  options: TraceRenderOptions = { hullAroundFrontier: false, hullFillOpacity: 0.16, pointLimit: 18, showEdges: true, showHull: true },
 ) {
   if (!traceLayer) return;
   const visibleNodeCount = Math.max(0, Math.ceil(traceLayer.coordinates.length * progress));
@@ -453,14 +463,16 @@ function renderTrace(
   const visibleTracePoints = traceLayer.coordinates.slice(0, visibleNodeCount).map(([lat, lng]) => toMapPoint({ lat, lng }, basemap));
   if (!visibleTracePoints.length && visibleEdgeCount === 0) return;
 
-  const hull = convexHull(visibleTracePoints);
+  const frontierPoints = visibleTracePoints.slice(-options.pointLimit);
+  const hull = convexHull(options.hullAroundFrontier ? frontierPoints : visibleTracePoints);
   if (options.showHull && hull.length >= 3) {
     L.polygon(hull.map(toLeaflet), {
       color: colors.stroke,
       weight: 1.4,
       opacity: 0.34,
       fillColor: colors.hullFill,
-      fillOpacity: 0.16,
+      fillOpacity: options.hullFillOpacity,
+      dashArray: options.hullDashArray,
       interactive: false,
     }).addTo(layer);
   }
@@ -481,7 +493,7 @@ function renderTrace(
     });
   }
 
-  visibleTracePoints.slice(-options.pointLimit).forEach((point, index, frontier) => {
+  frontierPoints.forEach((point, index, frontier) => {
     const opacity = 0.18 + (index / Math.max(frontier.length - 1, 1)) * 0.36;
     L.circleMarker(toLeaflet(point), {
       radius: options.showHull ? 2.5 : 3.7,
