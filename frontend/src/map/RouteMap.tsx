@@ -3,7 +3,16 @@ import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { useEffect, useMemo, useRef } from "react";
-import type { Basemap, BoundaryGeoJson, BoundaryGeometry, LayerVisibility, Point, RecommendationItem, SearchTraceRole } from "../types";
+import type {
+  Basemap,
+  BoundaryGeoJson,
+  BoundaryGeometry,
+  LayerVisibility,
+  Point,
+  RecommendationItem,
+  SearchTraceLayer,
+  SearchTraceRole,
+} from "../types";
 import { pointInBoundary } from "./boundary";
 import { fromMapPoint, toMapPoint } from "./coordinates";
 import { createStationIcon } from "./stationIcons";
@@ -37,6 +46,7 @@ const TRACE_ROLE_STYLES: Record<SearchTraceRole, TraceStyle> = {
   forward: { stroke: "#2563eb", fill: "#93c5fd", hullFill: "#bfdbfe" },
   backward: { stroke: "#b45309", fill: "#fbbf24", hullFill: "#fde68a" },
 };
+const SEARCH_TRACE_COMPLETE_AT = 0.82;
 
 interface TraceStyle {
   stroke: string;
@@ -81,25 +91,39 @@ export function RouteMap({
   const searchTraceLayerRef = useRef<L.LayerGroup | null>(null);
   const startSnapLayerRef = useRef<L.Polyline | null>(null);
   const stationSnapLayerRef = useRef<L.Polyline | null>(null);
+  const resetControlRef = useRef<L.Control | null>(null);
   const basemapRef = useRef<Basemap>(basemap);
+  const selectedPointRef = useRef<Point | null>(selectedPoint);
+  const selectedRecommendationRef = useRef<RecommendationItem | null>(null);
   const hasFitBoundaryRef = useRef(false);
 
   useEffect(() => {
     boundaryRef.current = boundary;
   }, [boundary]);
 
+  useEffect(() => {
+    selectedPointRef.current = selectedPoint;
+  }, [selectedPoint]);
+
   const selectedRecommendation = useMemo(() => {
     return recommendations.find((item) => item.station_id === selectedStationId) ?? recommendations[0] ?? null;
   }, [recommendations, selectedStationId]);
 
   useEffect(() => {
+    selectedRecommendationRef.current = selectedRecommendation;
+  }, [selectedRecommendation]);
+
+  useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { maxBoundsViscosity: 1.0, minZoom: MIN_ZOOM, zoomControl: true }).setView(
+    const map = L.map(containerRef.current, { maxBoundsViscosity: 1.0, minZoom: MIN_ZOOM, zoomControl: false }).setView(
       toLeaflet(toMapPoint(DEFAULT_CENTER, basemapRef.current)),
       MIN_ZOOM,
     );
+    L.control.zoom({ position: "bottomright" }).addTo(map);
     stationLayerRef.current = L.layerGroup().addTo(map);
     searchTraceLayerRef.current = L.layerGroup().addTo(map);
+    resetControlRef.current = createResetViewControl(() => resetMapView(map, basemapRef.current, boundaryRef.current, selectedPointRef.current, selectedRecommendationRef.current));
+    resetControlRef.current.addTo(map);
     map.on("click", (event) => {
       const point = fromMapPoint({ lat: event.latlng.lat, lng: event.latlng.lng }, basemapRef.current);
       if (boundaryRef.current && !pointInBoundary(point, boundaryRef.current)) {
@@ -214,24 +238,29 @@ export function RouteMap({
     }
 
     if (!selectedPoint || !selectedRecommendation?.route_coordinates.length) return;
+    const traceProgress = Math.min(searchPlaybackProgress / SEARCH_TRACE_COMPLETE_AT, 1);
+    const routeProgress =
+      searchPlaybackProgress <= SEARCH_TRACE_COMPLETE_AT
+        ? 0
+        : (searchPlaybackProgress - SEARCH_TRACE_COMPLETE_AT) / (1 - SEARCH_TRACE_COMPLETE_AT);
 
     if (layerVisibility.searchTrace && searchTraceLayerRef.current) {
       if (selectedRecommendation.search_trace.kind === "bidirectional") {
         renderTrace(
           searchTraceLayerRef.current,
-          traceLayerCoordinates(selectedRecommendation, "forward"),
-          searchPlaybackProgress,
+          getTraceLayer(selectedRecommendation, "forward"),
+          traceProgress,
           basemap,
           TRACE_ROLE_STYLES.forward,
         );
         renderTrace(
           searchTraceLayerRef.current,
-          traceLayerCoordinates(selectedRecommendation, "backward"),
-          searchPlaybackProgress,
+          getTraceLayer(selectedRecommendation, "backward"),
+          traceProgress,
           basemap,
           TRACE_ROLE_STYLES.backward,
         );
-        if (searchPlaybackProgress >= 0.98 && selectedRecommendation.search_trace.meeting_node_coordinate) {
+        if (traceProgress >= 1 && selectedRecommendation.search_trace.meeting_node_coordinate) {
           const [lat, lng] = selectedRecommendation.search_trace.meeting_node_coordinate;
           L.circleMarker(toLeaflet(toMapPoint({ lat, lng }, basemap)), {
             radius: 7,
@@ -245,8 +274,8 @@ export function RouteMap({
       } else {
         renderTrace(
           searchTraceLayerRef.current,
-          traceLayerCoordinates(selectedRecommendation, "single"),
-          searchPlaybackProgress,
+          getTraceLayer(selectedRecommendation, "single"),
+          traceProgress,
           basemap,
           TRACE_ROLE_STYLES.single,
         );
@@ -254,8 +283,9 @@ export function RouteMap({
     }
 
     if (layerVisibility.route) {
+      const routeCoordinates = visibleRouteCoordinates(selectedRecommendation.route_coordinates, routeProgress);
       routeLayerRef.current = L.polyline(
-        selectedRecommendation.route_coordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))),
+        routeCoordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))),
         { color: "#2563eb", weight: 5, opacity: 0.86 },
       ).addTo(map);
     }
@@ -329,38 +359,110 @@ function removePolyline(ref: React.MutableRefObject<L.Polyline | null>) {
   }
 }
 
-function traceLayerCoordinates(item: RecommendationItem, role: SearchTraceRole) {
-  return item.search_trace.layers.find((layer) => layer.role === role)?.coordinates ?? [];
+function createResetViewControl(onReset: () => void) {
+  const ResetControl = L.Control.extend({
+    options: { position: "bottomright" },
+    onAdd() {
+      const container = L.DomUtil.create("div", "leaflet-bar leaflet-control map-reset-control");
+      const button = L.DomUtil.create("button", "", container);
+      button.type = "button";
+      button.title = "Reset view";
+      button.setAttribute("aria-label", "Reset map view");
+      button.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v2.1M12 17.4v2.1M4.5 12h2.1M17.4 12h2.1"/><circle cx="12" cy="12" r="5.4"/><circle cx="12" cy="12" r="1.8"/></svg>';
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      L.DomEvent.on(button, "click", (event) => {
+        L.DomEvent.preventDefault(event);
+        onReset();
+      });
+      return container;
+    },
+  });
+  return new ResetControl();
+}
+
+function resetMapView(
+  map: L.Map,
+  basemap: Basemap,
+  boundary: BoundaryGeoJson | null,
+  selectedPoint: Point | null,
+  selectedRecommendation: RecommendationItem | null,
+) {
+  const routeBounds = selectedRecommendation?.route_coordinates.length
+    ? L.latLngBounds(selectedRecommendation.route_coordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))))
+    : null;
+  if (routeBounds?.isValid()) {
+    map.fitBounds(routeBounds.pad(0.18), { animate: true, padding: [28, 28] });
+    return;
+  }
+  if (selectedPoint) {
+    map.setView(toLeaflet(toMapPoint(selectedPoint, basemap)), 13, { animate: true });
+    return;
+  }
+  if (boundary) {
+    const bounds = boundaryBounds(boundaryToMapGeoJson(boundary, basemap));
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { animate: true, padding: [20, 20] });
+      return;
+    }
+  }
+  map.setView(toLeaflet(toMapPoint(DEFAULT_CENTER, basemap)), MIN_ZOOM, { animate: true });
+}
+
+function getTraceLayer(item: RecommendationItem, role: SearchTraceRole) {
+  return item.search_trace.layers.find((layer) => layer.role === role) ?? null;
+}
+
+function visibleRouteCoordinates(coordinates: [number, number][], progress: number) {
+  if (progress <= 0) return [];
+  const visibleCount = Math.max(2, Math.ceil(coordinates.length * Math.min(progress, 1)));
+  return coordinates.slice(0, visibleCount);
 }
 
 function renderTrace(
   layer: L.LayerGroup,
-  traceCoordinates: [number, number][],
+  traceLayer: SearchTraceLayer | null,
   progress: number,
   basemap: Basemap,
   colors: TraceStyle,
 ) {
-  const visibleTraceCount = Math.max(0, Math.ceil(traceCoordinates.length * progress));
-  const visibleTracePoints = traceCoordinates.slice(0, visibleTraceCount).map(([lat, lng]) => toMapPoint({ lat, lng }, basemap));
-  const visibleTrace = visibleTracePoints.map(toLeaflet);
-  if (!visibleTrace.length) return;
+  if (!traceLayer) return;
+  const visibleNodeCount = Math.max(0, Math.ceil(traceLayer.coordinates.length * progress));
+  const visibleEdgeCount = Math.max(0, Math.ceil(traceLayer.edges.length * progress));
+  const visibleTracePoints = traceLayer.coordinates.slice(0, visibleNodeCount).map(([lat, lng]) => toMapPoint({ lat, lng }, basemap));
+  if (!visibleTracePoints.length && visibleEdgeCount === 0) return;
 
   const hull = convexHull(visibleTracePoints);
   if (hull.length >= 3) {
     L.polygon(hull.map(toLeaflet), {
       color: colors.stroke,
-      weight: 2,
-      opacity: 0.55,
+      weight: 1.4,
+      opacity: 0.34,
       fillColor: colors.hullFill,
-      fillOpacity: 0.22,
+      fillOpacity: 0.16,
       interactive: false,
     }).addTo(layer);
   }
 
-  visibleTrace.forEach((point, index) => {
-    const opacity = 0.18 + (index / Math.max(visibleTrace.length - 1, 1)) * 0.42;
-    L.circleMarker(point, {
-      radius: 2.8,
+  traceLayer.edges.slice(0, visibleEdgeCount).forEach((edge) => {
+    const points = edge.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap)));
+    if (points.length < 2) return;
+    L.polyline(points, {
+      color: colors.stroke,
+      weight: 1.6,
+      opacity: 0.34,
+      lineCap: "round",
+      lineJoin: "round",
+      smoothFactor: 1,
+      interactive: false,
+    }).addTo(layer);
+  });
+
+  visibleTracePoints.slice(-18).forEach((point, index, frontier) => {
+    const opacity = 0.18 + (index / Math.max(frontier.length - 1, 1)) * 0.36;
+    L.circleMarker(toLeaflet(point), {
+      radius: 2.5,
       color: colors.stroke,
       weight: 0,
       fillColor: colors.fill,

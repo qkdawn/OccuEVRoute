@@ -1,11 +1,9 @@
+import logo from "../../assets/occuevroute-logo.jpg";
+
 export function WorkspaceHeader() {
   return (
     <header className="workspace-header">
-      <div className="workspace-mark" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
+      <img className="workspace-mark" src={logo} alt="" aria-hidden="true" />
       <div className="workspace-title">
         <p className="eyebrow">EV charging route planner</p>
         <h1>OccuEVRoute</h1>

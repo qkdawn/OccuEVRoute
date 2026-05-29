@@ -134,58 +134,11 @@ select:focus-visible {
 }
 
 .workspace-mark {
-  position: relative;
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border: 1px solid rgba(94, 153, 160, 0.42);
-  border-radius: 9px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(224, 239, 236, 0.74)),
-    var(--surface-strong);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 8px 18px rgba(13, 84, 108, 0.09);
-}
-
-.workspace-mark::before {
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  border: 2px solid rgba(13, 84, 108, 0.72);
-  border-right-color: transparent;
-  border-bottom-color: transparent;
-  border-radius: 50%;
-  content: "";
-  transform: rotate(-36deg);
-}
-
-.workspace-mark span {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(94, 153, 160, 0.16);
-}
-
-.workspace-mark span:nth-child(1) {
-  top: 10px;
-  left: 10px;
-}
-
-.workspace-mark span:nth-child(2) {
-  right: 10px;
-  bottom: 10px;
-}
-
-.workspace-mark span:nth-child(3) {
-  top: 12px;
-  right: 11px;
-  width: 4px;
-  height: 4px;
-  background: var(--route);
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 8px 18px rgba(13, 84, 108, 0.1);
 }
 
 .workspace-title {
@@ -1127,6 +1080,94 @@ input:hover {
 .station-image-marker.tier-large,
 .station-image-marker.selected {
   filter: drop-shadow(0 3px 8px rgba(13, 84, 108, 0.42));
+}
+
+.leaflet-bottom.leaflet-right {
+  display: flex;
+  right: 16px;
+  bottom: 16px;
+  flex-direction: row;
+  gap: 0;
+  border: 1px solid rgba(94, 153, 160, 0.34);
+  border-radius: 8px;
+  background: rgba(248, 251, 250, 0.94);
+  box-shadow: 0 8px 18px rgba(13, 84, 108, 0.14);
+}
+
+.leaflet-bottom.leaflet-right .leaflet-control {
+  margin: 0 !important;
+}
+
+.leaflet-control-zoom {
+  display: flex;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.leaflet-control-zoom a {
+  width: 34px !important;
+  height: 34px !important;
+  border: 0 !important;
+  color: var(--text) !important;
+  background: transparent !important;
+  font-family: "Outfit", "Source Sans 3", "Aptos", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 20px !important;
+  font-weight: 560;
+  line-height: 34px !important;
+  text-shadow: none;
+}
+
+.leaflet-control-zoom a + a {
+  border-left: 1px solid rgba(94, 153, 160, 0.22) !important;
+}
+
+.leaflet-control-zoom a:hover,
+.leaflet-control-zoom a:focus-visible {
+  color: var(--route) !important;
+  background: rgba(222, 239, 236, 0.72) !important;
+}
+
+.map-reset-control {
+  overflow: hidden;
+  border: 0 !important;
+  border-left: 1px solid rgba(94, 153, 160, 0.22) !important;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.map-reset-control button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font-family: "Outfit", "Source Sans 3", "Aptos", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.map-reset-control svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.map-reset-control button:hover,
+.map-reset-control button:focus-visible {
+  color: var(--route);
+  background: rgba(222, 239, 236, 0.72);
+  outline: none;
 }
 
 .leaflet-popup.station-popup {
