@@ -1,5 +1,5 @@
-import { Button } from "../ui";
 import type { Point } from "../../types";
+import { Button } from "../ui";
 import { StartSearchField } from "./StartSearchField";
 
 interface SearchConfigurationPanelProps {
