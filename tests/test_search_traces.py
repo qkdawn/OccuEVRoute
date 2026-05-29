@@ -53,6 +53,11 @@ def _layer_nodes(result, role: str) -> list[str]:
     return layer.nodes
 
 
+def _layer_edges(result, role: str) -> list[list[str]]:
+    layer = next(layer for layer in result.search_trace.layers if layer.role == role)
+    return layer.edges
+
+
 def test_bfs_returns_single_trace_on_directed_graph() -> None:
     graph = _graph([("A", "B"), ("B", "C"), ("C", "D")])
 
@@ -276,7 +281,7 @@ def test_recommendation_response_includes_ranking_orders() -> None:
         start_node_longitude=114.05,
         start_snap_distance_m=10.0,
         route_coordinates=[],
-        search_trace={"kind": "single", "layers": [{"role": "single", "coordinates": []}]},
+        search_trace={"kind": "single", "layers": [{"role": "single", "coordinates": [], "edges": []}]},
         distance_km=1.0,
         drive_time_min=2.0,
         road_snap_distance_m=3.0,
@@ -450,6 +455,25 @@ def test_ch_shortcut_unpacks_to_original_nodes() -> None:
 
     assert index.unpack_edge_nodes(2) == ["A", "B", "C"]
     assert index.unpack_edge_metrics(2) == (2000.0, 2.0)
+
+
+def test_ch_trace_edges_unpack_shortcuts_to_original_nodes() -> None:
+    graph = _weighted_graph([("A", "B", 1.0), ("B", "C", 1.0)])
+    index = CHIndex(
+        ranks={"A": 1, "B": 0, "C": 2},
+        upward={"A": [2]},
+        reverse_upward={},
+        edges={
+            0: CHEdge(0, "A", "B", 1.0, 1000.0),
+            1: CHEdge(1, "B", "C", 1.0, 1000.0),
+            2: CHEdge(2, "A", "C", 2.0, 2000.0, "B", 0, 1),
+        },
+    )
+
+    result = ch_bidirectional_dijkstra_search(graph, "A", "C", index)
+
+    assert result.path == ["A", "B", "C"]
+    assert ["A", "B", "C"] in _layer_edges(result, "forward")
 
 
 def test_ch_dijkstra_respects_edge_direction() -> None:

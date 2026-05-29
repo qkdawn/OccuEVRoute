@@ -179,7 +179,7 @@ def _rejected_result(station: pd.Series, algorithm: str, reason: str) -> dict:
 def _empty_search_trace() -> dict:
     return {
         "kind": "single",
-        "layers": [{"role": "single", "coordinates": []}],
+        "layers": [{"role": "single", "coordinates": [], "edges": []}],
         "meeting_node_coordinate": None,
     }
 
@@ -188,11 +188,27 @@ def _search_trace(graph, search: SearchResult) -> dict:
     return {
         "kind": search.search_trace.kind,
         "layers": [
-            {"role": layer.role, "coordinates": _nodes_to_coordinates(graph, layer.nodes)}
+            {
+                "role": layer.role,
+                "coordinates": _nodes_to_coordinates(graph, layer.nodes),
+                "edges": _edges_to_coordinates(graph, layer.edges),
+            }
             for layer in search.search_trace.layers
         ],
         "meeting_node_coordinate": _optional_node_coordinates(graph, search.search_trace.meeting_node),
     }
+
+
+def _edges_to_coordinates(graph, edges: list[list[str]]) -> list[list[tuple[float, float]]]:
+    coordinates = []
+    for edge_path in edges:
+        if len(edge_path) < 2:
+            continue
+        try:
+            coordinates.append(_path_to_route_coordinates(graph, edge_path))
+        except KeyError:
+            continue
+    return coordinates
 
 
 def _optional_node_coordinates(graph, node: str | None) -> tuple[float, float] | None:

@@ -21,6 +21,7 @@ export type SearchTraceRole = "single" | "forward" | "backward";
 export interface SearchTraceLayer {
   role: SearchTraceRole;
   coordinates: [number, number][];
+  edges: [number, number][][];
 }
 
 export interface SearchTrace {

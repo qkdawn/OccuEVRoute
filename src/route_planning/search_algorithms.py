@@ -23,6 +23,7 @@ SearchTraceRole = Literal["single", "forward", "backward"]
 class SearchTraceLayer:
     role: SearchTraceRole
     nodes: list[str]
+    edges: list[list[str]]
 
 
 @dataclass(frozen=True)
@@ -174,16 +175,22 @@ def _success(
     )
 
 
-def _single_trace(nodes: list[str]) -> SearchTrace:
-    return SearchTrace(kind="single", layers=[SearchTraceLayer(role="single", nodes=nodes)])
+def _single_trace(nodes: list[str], edges: list[list[str]]) -> SearchTrace:
+    return SearchTrace(kind="single", layers=[SearchTraceLayer(role="single", nodes=nodes, edges=edges)])
 
 
-def _bidirectional_trace(forward_nodes: list[str], backward_nodes: list[str], meeting_node: str | None = None) -> SearchTrace:
+def _bidirectional_trace(
+    forward_nodes: list[str],
+    backward_nodes: list[str],
+    forward_edges: list[list[str]],
+    backward_edges: list[list[str]],
+    meeting_node: str | None = None,
+) -> SearchTrace:
     return SearchTrace(
         kind="bidirectional",
         layers=[
-            SearchTraceLayer(role="forward", nodes=forward_nodes),
-            SearchTraceLayer(role="backward", nodes=backward_nodes),
+            SearchTraceLayer(role="forward", nodes=forward_nodes, edges=forward_edges),
+            SearchTraceLayer(role="backward", nodes=backward_nodes, edges=backward_edges),
         ],
         meeting_node=meeting_node,
     )
@@ -197,6 +204,7 @@ def bfs_search(graph, start: str, goal: str) -> SearchResult:
     visited = {start}
     expanded = 0
     expanded_trace = []
+    trace_edges = []
 
     while queue:
         node = queue.popleft()
@@ -204,13 +212,14 @@ def bfs_search(graph, start: str, goal: str) -> SearchResult:
         expanded_trace.append(node)
         if node == goal:
             path = _reconstruct_path(parent, goal)
-            return _success("bfs", graph, path, started, expanded, _single_trace(expanded_trace))
+            return _success("bfs", graph, path, started, expanded, _single_trace(expanded_trace, trace_edges))
         for neighbor in graph.successors(node):
             if neighbor not in visited:
                 visited.add(neighbor)
                 parent[neighbor] = node
+                trace_edges.append([node, neighbor])
                 queue.append(neighbor)
-    return _not_found("bfs", started, expanded, _single_trace(expanded_trace))
+    return _not_found("bfs", started, expanded, _single_trace(expanded_trace, trace_edges))
 
 
 def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
@@ -227,7 +236,7 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
             [start],
             started,
             1,
-            _bidirectional_trace([start], [goal], start),
+            _bidirectional_trace([start], [goal], [], [], start),
         )
 
     forward_queue = deque([start])
@@ -239,6 +248,8 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
     expanded = 0
     forward_trace_nodes = []
     backward_trace_nodes = []
+    forward_trace_edges = []
+    backward_trace_edges = []
 
     def expand_forward_layer() -> str | None:
         nonlocal expanded
@@ -251,6 +262,7 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
                     continue
                 forward_visited.add(neighbor)
                 forward_parent[neighbor] = node
+                forward_trace_edges.append([node, neighbor])
                 if neighbor in backward_visited:
                     return neighbor
                 forward_queue.append(neighbor)
@@ -267,6 +279,7 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
                     continue
                 backward_visited.add(predecessor)
                 backward_parent[predecessor] = node
+                backward_trace_edges.append([predecessor, node])
                 if predecessor in forward_visited:
                     return predecessor
                 backward_queue.append(predecessor)
@@ -284,14 +297,14 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
                 path,
                 started,
                 expanded,
-                _bidirectional_trace(forward_trace_nodes, backward_trace_nodes, meeting_node),
+                _bidirectional_trace(forward_trace_nodes, backward_trace_nodes, forward_trace_edges, backward_trace_edges, meeting_node),
             )
 
     return _not_found(
         "bidirectional_bfs",
         started,
         expanded,
-        _bidirectional_trace(forward_trace_nodes, backward_trace_nodes),
+        _bidirectional_trace(forward_trace_nodes, backward_trace_nodes, forward_trace_edges, backward_trace_edges),
     )
 
 
@@ -302,6 +315,7 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
     parent: dict[str, str | None] = {start: None}
     expanded = 0
     expanded_trace = []
+    trace_edges = []
 
     while heap:
         cost, node = heapq.heappop(heap)
@@ -311,15 +325,16 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
         expanded_trace.append(node)
         if node == goal:
             path = _reconstruct_path(parent, goal)
-            return _success("ucs", graph, path, started, expanded, _single_trace(expanded_trace))
+            return _success("ucs", graph, path, started, expanded, _single_trace(expanded_trace, trace_edges))
         for neighbor in graph.successors(node):
             _, travel_time_s = edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost
                 parent[neighbor] = node
+                trace_edges.append([node, neighbor])
                 heapq.heappush(heap, (new_cost, neighbor))
-    return _not_found("ucs", started, expanded, _single_trace(expanded_trace))
+    return _not_found("ucs", started, expanded, _single_trace(expanded_trace, trace_edges))
 
 
 def astar_search(
@@ -335,6 +350,7 @@ def astar_search(
     parent: dict[str, str | None] = {start: None}
     expanded = 0
     expanded_trace = []
+    trace_edges = []
 
     while heap:
         _, cost, node = heapq.heappop(heap)
@@ -344,16 +360,17 @@ def astar_search(
         expanded_trace.append(node)
         if node == goal:
             path = _reconstruct_path(parent, goal)
-            return _success(algorithm, graph, path, started, expanded, _single_trace(expanded_trace))
+            return _success(algorithm, graph, path, started, expanded, _single_trace(expanded_trace, trace_edges))
         for neighbor in graph.successors(node):
             _, travel_time_s = edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
             if new_cost < best_cost.get(neighbor, float("inf")):
                 best_cost[neighbor] = new_cost
                 parent[neighbor] = node
+                trace_edges.append([node, neighbor])
                 priority = new_cost + _heuristic_minutes(graph, neighbor, goal, landmark_heuristic)
                 heapq.heappush(heap, (priority, new_cost, neighbor))
-    return _not_found(algorithm, started, expanded, _single_trace(expanded_trace))
+    return _not_found(algorithm, started, expanded, _single_trace(expanded_trace, trace_edges))
 
 
 def alt_astar_search(

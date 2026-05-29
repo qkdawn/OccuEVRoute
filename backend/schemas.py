@@ -35,6 +35,7 @@ class RecommendationRequest(BaseModel):
 class SearchTraceLayer(BaseModel):
     role: SearchTraceRole
     coordinates: list[tuple[float, float]]
+    edges: list[list[tuple[float, float]]]
 
 
 class SearchTrace(BaseModel):
