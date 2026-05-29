@@ -457,7 +457,7 @@ def test_ch_shortcut_unpacks_to_original_nodes() -> None:
     assert index.unpack_edge_metrics(2) == (2000.0, 2.0)
 
 
-def test_ch_trace_edges_unpack_shortcuts_to_original_nodes() -> None:
+def test_ch_trace_edges_hide_shortcuts_but_route_still_unpacks_them() -> None:
     graph = _weighted_graph([("A", "B", 1.0), ("B", "C", 1.0)])
     index = CHIndex(
         ranks={"A": 1, "B": 0, "C": 2},
@@ -473,7 +473,8 @@ def test_ch_trace_edges_unpack_shortcuts_to_original_nodes() -> None:
     result = ch_bidirectional_dijkstra_search(graph, "A", "C", index)
 
     assert result.path == ["A", "B", "C"]
-    assert ["A", "B", "C"] in _layer_edges(result, "forward")
+    assert ["A", "B", "C"] not in _layer_edges(result, "forward")
+    assert _layer_edges(result, "forward") == []
 
 
 def test_ch_dijkstra_respects_edge_direction() -> None:

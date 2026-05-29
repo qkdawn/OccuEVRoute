@@ -259,6 +259,8 @@ export function App() {
           <span>{selectedPoint ? "Start selected" : "Choose Shenzhen start"}</span>
           <strong>{algorithmShortLabel(form.algorithm)}</strong>
           <span>{rankedRecommendations.length ? `${rankedRecommendations.length} ranked` : "No run"}</span>
+          {selectedRecommendation && <span>{`${selectedRecommendation.expanded_nodes} expanded`}</span>}
+          {selectedRecommendation && <span>{`${(selectedRecommendation.runtime_seconds * 1000).toFixed(1)} ms`}</span>}
         </div>
         <RouteMap
           basemap={form.basemap}

@@ -66,7 +66,9 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                 if new_cost < forward_best.get(edge.v, float("inf")):
                     forward_best[edge.v] = new_cost
                     forward_parent[edge.v] = (node, edge_id)
-                    forward_trace_edges.append(ch_index.unpack_edge_nodes(edge_id))
+                    trace_edge = _trace_edge_nodes(ch_index, edge_id)
+                    if trace_edge:
+                        forward_trace_edges.append(trace_edge)
                     heapq.heappush(forward_heap, (new_cost, edge.v))
                     try_relax_meeting(edge.v)
         else:
@@ -83,7 +85,9 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                 if new_cost < backward_best.get(edge.u, float("inf")):
                     backward_best[edge.u] = new_cost
                     backward_parent[edge.u] = (node, edge_id)
-                    backward_trace_edges.append(ch_index.unpack_edge_nodes(edge_id))
+                    trace_edge = _trace_edge_nodes(ch_index, edge_id)
+                    if trace_edge:
+                        backward_trace_edges.append(trace_edge)
                     heapq.heappush(backward_heap, (new_cost, edge.u))
                     try_relax_meeting(edge.u)
 
@@ -107,6 +111,13 @@ def _frontiers_cannot_improve(
 
 def _heap_min(heap: list[tuple[float, str]]) -> float:
     return heap[0][0] if heap else float("inf")
+
+
+def _trace_edge_nodes(ch_index: CHIndex, edge_id: int) -> list[str]:
+    edge = ch_index.edge(edge_id)
+    if edge.is_shortcut:
+        return []
+    return ch_index.unpack_edge_nodes(edge_id)
 
 
 def _seed_forward_frontier(

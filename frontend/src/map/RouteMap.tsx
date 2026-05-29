@@ -47,6 +47,7 @@ const TRACE_ROLE_STYLES: Record<SearchTraceRole, TraceStyle> = {
   backward: { stroke: "#b45309", fill: "#fbbf24", hullFill: "#fde68a" },
 };
 const SEARCH_TRACE_COMPLETE_AT = 0.82;
+const CH_FRONTIER_POINT_LIMIT = 10;
 
 interface TraceStyle {
   stroke: string;
@@ -238,6 +239,7 @@ export function RouteMap({
     }
 
     if (!selectedPoint || !selectedRecommendation?.route_coordinates.length) return;
+    const isChTrace = selectedRecommendation.algorithm === "ch_bidirectional_dijkstra";
     const traceProgress = Math.min(searchPlaybackProgress / SEARCH_TRACE_COMPLETE_AT, 1);
     const routeProgress =
       searchPlaybackProgress <= SEARCH_TRACE_COMPLETE_AT
@@ -252,6 +254,7 @@ export function RouteMap({
           traceProgress,
           basemap,
           TRACE_ROLE_STYLES.forward,
+          chTraceOptions(isChTrace),
         );
         renderTrace(
           searchTraceLayerRef.current,
@@ -259,6 +262,7 @@ export function RouteMap({
           traceProgress,
           basemap,
           TRACE_ROLE_STYLES.backward,
+          chTraceOptions(isChTrace),
         );
         if (traceProgress >= 1 && selectedRecommendation.search_trace.meeting_node_coordinate) {
           const [lat, lng] = selectedRecommendation.search_trace.meeting_node_coordinate;
@@ -269,7 +273,9 @@ export function RouteMap({
             fillColor: "#ffffff",
             fillOpacity: 0.92,
             interactive: false,
-          }).addTo(searchTraceLayerRef.current);
+          })
+            .bindTooltip("Meeting node", { direction: "top", opacity: 0.86 })
+            .addTo(searchTraceLayerRef.current);
         }
       } else {
         renderTrace(
@@ -283,7 +289,9 @@ export function RouteMap({
     }
 
     if (layerVisibility.route) {
-      const routeCoordinates = visibleRouteCoordinates(selectedRecommendation.route_coordinates, routeProgress);
+      const routeCoordinates = isChTrace
+        ? selectedRecommendation.route_coordinates
+        : visibleRouteCoordinates(selectedRecommendation.route_coordinates, routeProgress);
       routeLayerRef.current = L.polyline(
         routeCoordinates.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap))),
         { color: "#2563eb", weight: 5, opacity: 0.86 },
@@ -420,12 +428,24 @@ function visibleRouteCoordinates(coordinates: [number, number][], progress: numb
   return coordinates.slice(0, visibleCount);
 }
 
+interface TraceRenderOptions {
+  pointLimit: number;
+  showEdges: boolean;
+  showHull: boolean;
+}
+
+function chTraceOptions(isChTrace: boolean): TraceRenderOptions | undefined {
+  if (!isChTrace) return undefined;
+  return { pointLimit: CH_FRONTIER_POINT_LIMIT, showEdges: false, showHull: false };
+}
+
 function renderTrace(
   layer: L.LayerGroup,
   traceLayer: SearchTraceLayer | null,
   progress: number,
   basemap: Basemap,
   colors: TraceStyle,
+  options: TraceRenderOptions = { pointLimit: 18, showEdges: true, showHull: true },
 ) {
   if (!traceLayer) return;
   const visibleNodeCount = Math.max(0, Math.ceil(traceLayer.coordinates.length * progress));
@@ -434,7 +454,7 @@ function renderTrace(
   if (!visibleTracePoints.length && visibleEdgeCount === 0) return;
 
   const hull = convexHull(visibleTracePoints);
-  if (hull.length >= 3) {
+  if (options.showHull && hull.length >= 3) {
     L.polygon(hull.map(toLeaflet), {
       color: colors.stroke,
       weight: 1.4,
@@ -445,28 +465,30 @@ function renderTrace(
     }).addTo(layer);
   }
 
-  traceLayer.edges.slice(0, visibleEdgeCount).forEach((edge) => {
-    const points = edge.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap)));
-    if (points.length < 2) return;
-    L.polyline(points, {
-      color: colors.stroke,
-      weight: 1.6,
-      opacity: 0.34,
-      lineCap: "round",
-      lineJoin: "round",
-      smoothFactor: 1,
-      interactive: false,
-    }).addTo(layer);
-  });
+  if (options.showEdges) {
+    traceLayer.edges.slice(0, visibleEdgeCount).forEach((edge) => {
+      const points = edge.map(([lat, lng]) => toLeaflet(toMapPoint({ lat, lng }, basemap)));
+      if (points.length < 2) return;
+      L.polyline(points, {
+        color: colors.stroke,
+        weight: 1.6,
+        opacity: 0.34,
+        lineCap: "round",
+        lineJoin: "round",
+        smoothFactor: 1,
+        interactive: false,
+      }).addTo(layer);
+    });
+  }
 
-  visibleTracePoints.slice(-18).forEach((point, index, frontier) => {
+  visibleTracePoints.slice(-options.pointLimit).forEach((point, index, frontier) => {
     const opacity = 0.18 + (index / Math.max(frontier.length - 1, 1)) * 0.36;
     L.circleMarker(toLeaflet(point), {
-      radius: 2.5,
+      radius: options.showHull ? 2.5 : 3.7,
       color: colors.stroke,
-      weight: 0,
+      weight: options.showHull ? 0 : 1.4,
       fillColor: colors.fill,
-      fillOpacity: opacity,
+      fillOpacity: options.showHull ? opacity : 0.82,
       interactive: false,
     }).addTo(layer);
   });
