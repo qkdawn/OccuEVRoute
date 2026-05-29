@@ -29,7 +29,7 @@ src/
 
 ## Run the Application
 
-### Quick start with Docker
+### Quick start with Vite
 
 The app expects route-planning artifacts under `data/processed/`. These files are
 not committed to Git because they are generated and large. Download the processed
@@ -51,15 +51,31 @@ python scripts/check_route_data.py
 python scripts/check_runtime_data.py
 ```
 
-Start the app:
+Install backend dependencies:
 
 ```powershell
-docker compose up --build
+python -m pip install -r backend/requirements.txt
 ```
 
-Then open `http://localhost:9090`.
+Start the backend in one PowerShell window:
 
-The backend is available at `http://localhost:9000`; a smoke test is:
+```powershell
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 9000
+```
+
+Install frontend dependencies and start the Vite deployment preview in another
+PowerShell window:
+
+```powershell
+cd frontend
+npm install
+npm run deploy
+```
+
+Then open `http://localhost:9090`. Vite serves the built frontend and proxies
+`/api` requests to `http://127.0.0.1:9000`.
+
+The backend smoke test is:
 
 ```powershell
 Invoke-RestMethod http://localhost:9000/api/health
@@ -89,11 +105,11 @@ Frontend:
 
 ```powershell
 cd frontend
-npm install
 npm run dev
 ```
 
-Then open `http://localhost:5173`.
+Then open `http://localhost:5173`. The Vite dev server also proxies `/api` to
+`http://127.0.0.1:9000`.
 
 ## Data Preparation
 

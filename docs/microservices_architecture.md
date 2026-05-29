@@ -1,6 +1,6 @@
 # OccuEVRoute 微服务架构图
 
-下图展示 OccuEVRoute 的逻辑微服务架构。当前 Docker 部署中前端与后端是两个运行容器，后端内部再按领域拆分为 API 编排、路线规划、占用率预测、地理数据与离线数据/模型制品服务边界。
+下图展示 OccuEVRoute 的逻辑微服务架构。当前默认部署为本地 FastAPI 后端加 Vite 前端预览服务，后端内部再按领域拆分为 API 编排、路线规划、占用率预测、地理数据与离线数据/模型制品服务边界。
 
 <div style="width: 1200px; box-sizing: border-box; position: relative; background: #fafbfc; padding: 20px; border-radius: 6px; border: 1px solid #e5e7eb;">
   <style scoped>
@@ -16,7 +16,7 @@
   <div class="arch-subtitle">面向深圳的课程演示型电动车充电路线规划：地图工作流、搜索算法、充电可达性、占用率预测、POI 上下文与诊断信息</div>
   <div class="arch-wrapper">
     <div class="arch-sidebar">
-      <div class="arch-sidebar-panel"><div class="arch-sidebar-title">演示运维</div><div class="arch-sidebar-item">Docker Compose</div><div class="arch-sidebar-item">前端 9090</div><div class="arch-sidebar-item">后端 9000</div><div class="arch-sidebar-item">健康检查 API</div></div>
+      <div class="arch-sidebar-panel"><div class="arch-sidebar-title">演示运维</div><div class="arch-sidebar-item">Vite preview</div><div class="arch-sidebar-item">前端 9090</div><div class="arch-sidebar-item">后端 9000</div><div class="arch-sidebar-item">健康检查 API</div></div>
       <div class="arch-sidebar-panel"><div class="arch-sidebar-title">诊断信息</div><div class="arch-sidebar-item">搜索轨迹</div><div class="arch-sidebar-item">扩展节点数</div><div class="arch-sidebar-item">运行耗时</div><div class="arch-sidebar-item">拒绝原因</div></div>
       <div class="arch-sidebar-panel"><div class="arch-sidebar-title">质量检查</div><div class="arch-sidebar-item">路线数据检查</div><div class="arch-sidebar-item">API 冒烟测试</div><div class="arch-sidebar-item">前端构建</div><div class="arch-sidebar-item">重点测试</div></div>
     </div>
@@ -53,7 +53,7 @@
       </div>
       <div class="arch-layer infra">
         <div class="arch-layer-title">运行时与部署</div>
-        <div class="arch-grid arch-grid-4"><div class="arch-box highlight">前端容器<br><small>Nginx 托管 Vite 构建产物</small></div><div class="arch-box highlight">后端容器<br><small>FastAPI + Python 领域模块</small></div><div class="arch-box">只读数据挂载<br><small>data、models、ML/Data</small></div><div class="arch-box">本地开发运行时<br><small>uvicorn 9000 + Vite 5173</small></div></div>
+        <div class="arch-grid arch-grid-4"><div class="arch-box highlight">Vite 前端预览<br><small>构建产物 + /api 代理</small></div><div class="arch-box highlight">FastAPI 后端<br><small>Python 领域模块</small></div><div class="arch-box">本地数据制品<br><small>data、models、ML/Data</small></div><div class="arch-box">开发运行时<br><small>uvicorn 9000 + Vite 5173</small></div></div>
       </div>
       <div class="arch-layer external">
         <div class="arch-layer-title">离线数据流水线服务</div>
@@ -70,7 +70,7 @@
 
 ## 阅读说明
 
-- 运行时微服务：`frontend` 容器负责地图与交互，`backend` 容器负责 API 与领域编排。
+- 运行时微服务：Vite 前端负责地图与交互，FastAPI 后端负责 API 与领域编排。
 - 逻辑服务边界：后端内部按路线规划、候选站筛选、约束判断、POI 合并、占用率预测和排序诊断拆分。
 - 数据服务边界：大体量路网、站点、POI、索引和模型以制品形式挂载，避免运行时重新生成。
 - 离线流水线：`src/data_processing/` 与 `src/waiting_prediction/` 负责生成可复现的数据、索引、模型和报告图表。

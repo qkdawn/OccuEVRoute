@@ -13,12 +13,13 @@ export default defineConfig({
     },
   },
   preview: {
-    host: "0.0.0.0",
-    port: 80,
+    host: "127.0.0.1",
+    port: 9090,
+    strictPort: true,
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://backend:8000",
+        target: "http://127.0.0.1:9000",
         changeOrigin: true,
       },
     },
