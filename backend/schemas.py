@@ -38,9 +38,15 @@ class SearchTraceLayer(BaseModel):
     edges: list[list[tuple[float, float]]]
 
 
+class CandidateRouteEvent(BaseModel):
+    step: int
+    coordinates: list[tuple[float, float]]
+
+
 class SearchTrace(BaseModel):
     kind: SearchTraceKind
     layers: list[SearchTraceLayer]
+    candidate_route_events: list[CandidateRouteEvent] = Field(default_factory=list)
     meeting_node_coordinate: tuple[float, float] | None = None
 
     @model_validator(mode="after")
@@ -70,6 +76,7 @@ class RecommendationItem(BaseModel):
     start_node_longitude: float | None
     start_snap_distance_m: float | None
     route_coordinates: list[tuple[float, float]]
+    route_trace_coordinates: list[tuple[float, float]] = Field(default_factory=list)
     search_trace: SearchTrace
     distance_km: float | None
     drive_time_min: float | None

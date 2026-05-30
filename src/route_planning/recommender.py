@@ -64,6 +64,7 @@ def recommend_charging_stations(
             constraints,
         )
         route_coordinates = _path_to_route_coordinates(search_graph, search.path)
+        route_trace_coordinates = _nodes_to_coordinates(search_graph, search.route_trace_path or [])
         results.append(
             {
                 "station_id": int(station["station_id"]),
@@ -71,6 +72,7 @@ def recommend_charging_stations(
                 "algorithm": search.algorithm,
                 "path": search.path,
                 "route_coordinates": route_coordinates,
+                "route_trace_coordinates": route_trace_coordinates,
                 "search_trace": _search_trace(search_graph, search),
                 "start_node": str(start_node),
                 "start_node_latitude": start_node_latitude,
@@ -153,6 +155,7 @@ def _rejected_result(station: pd.Series, algorithm: str, reason: str) -> dict:
         "algorithm": algorithm,
         "path": [],
         "route_coordinates": [],
+        "route_trace_coordinates": [],
         "search_trace": _empty_search_trace(),
         "start_node": None,
         "start_node_latitude": None,
@@ -180,6 +183,7 @@ def _empty_search_trace() -> dict:
     return {
         "kind": "single",
         "layers": [{"role": "single", "coordinates": [], "edges": []}],
+        "candidate_route_events": [],
         "meeting_node_coordinate": None,
     }
 
@@ -194,6 +198,10 @@ def _search_trace(graph, search: SearchResult) -> dict:
                 "edges": _edges_to_coordinates(graph, layer.edges),
             }
             for layer in search.search_trace.layers
+        ],
+        "candidate_route_events": [
+            {"step": event.step, "coordinates": _nodes_to_coordinates(graph, event.path)}
+            for event in search.search_trace.candidate_path_events
         ],
         "meeting_node_coordinate": _optional_node_coordinates(graph, search.search_trace.meeting_node),
     }

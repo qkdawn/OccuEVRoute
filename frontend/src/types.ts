@@ -24,9 +24,15 @@ export interface SearchTraceLayer {
   edges: [number, number][][];
 }
 
+export interface CandidateRouteEvent {
+  step: number;
+  coordinates: [number, number][];
+}
+
 export interface SearchTrace {
   kind: SearchTraceKind;
   layers: SearchTraceLayer[];
+  candidate_route_events: CandidateRouteEvent[];
   meeting_node_coordinate: [number, number] | null;
 }
 
@@ -61,6 +67,7 @@ export interface RecommendationItem {
   start_node_longitude: number | null;
   start_snap_distance_m: number | null;
   route_coordinates: [number, number][];
+  route_trace_coordinates: [number, number][];
   search_trace: SearchTrace;
   distance_km: number | null;
   drive_time_min: number | null;

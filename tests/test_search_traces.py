@@ -67,6 +67,7 @@ def test_bfs_returns_single_trace_on_directed_graph() -> None:
     assert result.path == ["A", "B", "C", "D"]
     assert result.search_trace.kind == "single"
     assert _layer_nodes(result, "single") == ["A", "B", "C", "D"]
+    assert result.route_trace_path == ["A", "B", "C", "D"]
     assert result.search_trace.meeting_node is None
 
 
@@ -81,6 +82,8 @@ def test_bidirectional_bfs_uses_two_frontier_trace_on_directed_graph() -> None:
     assert _layer_nodes(result, "forward") == ["A", "B"]
     assert _layer_nodes(result, "backward") == ["D"]
     assert result.search_trace.meeting_node == "C"
+    assert result.search_trace.candidate_path_events[0].step == 3
+    assert result.search_trace.candidate_path_events[0].path == ["A", "B", "C", "D"]
 
 
 def test_bfs_supports_start_access_graph_predecessors() -> None:
@@ -156,7 +159,26 @@ def test_single_frontier_algorithms_return_single_trace(search) -> None:
     assert result.path == ["A", "B", "C"]
     assert result.search_trace.kind == "single"
     assert _layer_nodes(result, "single") == ["A", "B", "C"]
+    assert result.route_trace_path == ["A", "B", "C"]
     assert result.search_trace.meeting_node is None
+
+
+@pytest.mark.parametrize("search", [ucs_search, astar_search])
+def test_single_frontier_candidate_path_uses_heap_top_not_latest_update(search) -> None:
+    graph = _weighted_graph(
+        [
+            ("A", "C", 1.0),
+            ("A", "B", 10.0),
+            ("C", "D", 1.0),
+            ("B", "D", 1.0),
+        ]
+    )
+
+    result = search(graph, "A", "D")
+
+    assert result.search_trace.candidate_path_events[0].step == 1
+    assert result.search_trace.candidate_path_events[0].path == ["A", "C"]
+    assert result.route_trace_path == ["A", "C", "D"]
 
 
 def test_search_trace_schema_rejects_non_single_layer_for_single_trace() -> None:
@@ -473,6 +495,9 @@ def test_ch_trace_edges_hide_shortcuts_but_route_still_unpacks_them() -> None:
     result = ch_bidirectional_dijkstra_search(graph, "A", "C", index)
 
     assert result.path == ["A", "B", "C"]
+    assert result.route_trace_path == ["A", "C"]
+    assert result.search_trace.candidate_path_events[0].step > 0
+    assert result.search_trace.candidate_path_events[0].path == ["A", "C"]
     assert ["A", "B", "C"] not in _layer_edges(result, "forward")
     assert _layer_edges(result, "forward") == []
 

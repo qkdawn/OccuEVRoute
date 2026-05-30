@@ -7,7 +7,7 @@ import time
 
 from ch_index import CHIndex
 from graph_metrics import edge_metrics, path_metrics
-from search_algorithms import SearchResult, SearchTrace, SearchTraceLayer
+from search_algorithms import CandidatePathEvent, SearchResult, SearchTrace, SearchTraceLayer
 
 
 CH_ALGORITHM = "ch_bidirectional_dijkstra"
@@ -16,7 +16,20 @@ CH_ALGORITHM = "ch_bidirectional_dijkstra"
 def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHIndex) -> SearchResult:
     started = time.perf_counter()
     if start == goal:
-        return _result(graph, [start], True, 1, started, [start], [goal], [], [], start)
+        return _result(
+            graph,
+            [start],
+            True,
+            1,
+            started,
+            [start],
+            [goal],
+            [],
+            [],
+            start,
+            [start],
+            [CandidatePathEvent(step=1, path=[start])],
+        )
     if not ch_index.contains(goal):
         return _result(graph, [], False, 0, started, [], [], [], [], None)
 
@@ -36,6 +49,7 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
     backward_trace: list[str] = []
     forward_trace_edges: list[list[str]] = []
     backward_trace_edges: list[list[str]] = []
+    candidate_path_events: list[CandidatePathEvent] = []
     forward_settled: set[str] = set()
     backward_settled: set[str] = set()
 
@@ -47,6 +61,11 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
         if total_cost < best_total:
             best_total = total_cost
             meeting_node = node
+            _append_candidate_path_event(
+                candidate_path_events,
+                len(forward_trace) + len(backward_trace),
+                _reconstruct_query_path(start, node, forward_parent, backward_parent),
+            )
 
     while forward_heap or backward_heap:
         if _frontiers_cannot_improve(forward_heap, backward_heap, best_total):
@@ -92,10 +111,35 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                     try_relax_meeting(edge.u)
 
     if meeting_node is None:
-        return _result(graph, [], False, expanded, started, forward_trace, backward_trace, forward_trace_edges, backward_trace_edges, None)
+        return _result(
+            graph,
+            [],
+            False,
+            expanded,
+            started,
+            forward_trace,
+            backward_trace,
+            forward_trace_edges,
+            backward_trace_edges,
+            None,
+        )
 
     path = _reconstruct_path(start, meeting_node, forward_parent, backward_parent, ch_index)
-    return _result(graph, path, True, expanded, started, forward_trace, backward_trace, forward_trace_edges, backward_trace_edges, meeting_node)
+    route_trace_path = _reconstruct_query_path(start, meeting_node, forward_parent, backward_parent)
+    return _result(
+        graph,
+        path,
+        True,
+        expanded,
+        started,
+        forward_trace,
+        backward_trace,
+        forward_trace_edges,
+        backward_trace_edges,
+        meeting_node,
+        route_trace_path,
+        candidate_path_events,
+    )
 
 
 def _frontiers_cannot_improve(
@@ -117,7 +161,7 @@ def _trace_edge_nodes(ch_index: CHIndex, edge_id: int) -> list[str]:
     edge = ch_index.edge(edge_id)
     if edge.is_shortcut:
         return []
-    return ch_index.unpack_edge_nodes(edge_id)
+    return [edge.u, edge.v]
 
 
 def _seed_forward_frontier(
@@ -187,6 +231,40 @@ def _reconstruct_path(
     return _join_segments([path, *backward_segments])
 
 
+def _reconstruct_query_path(
+    start: str,
+    meeting_node: str,
+    forward_parent: dict[str, tuple[str | None, int | None]],
+    backward_parent: dict[str, tuple[str | None, int | None]],
+) -> list[str]:
+    forward_nodes = []
+    node = meeting_node
+    while True:
+        forward_nodes.append(node)
+        previous, _ = forward_parent[node]
+        if previous is None:
+            break
+        node = previous
+    path = list(reversed(forward_nodes))
+    if not path:
+        path = [start]
+
+    node = meeting_node
+    while True:
+        next_node, _ = backward_parent[node]
+        if next_node is None:
+            break
+        if path[-1] != next_node:
+            path.append(next_node)
+        node = next_node
+    return path
+
+
+def _append_candidate_path_event(candidate_path_events: list[CandidatePathEvent], step: int, path: list[str]) -> None:
+    if path and (not candidate_path_events or candidate_path_events[-1].path != path):
+        candidate_path_events.append(CandidatePathEvent(step=step, path=path))
+
+
 def _join_segments(segments: list[list[str]]) -> list[str]:
     path: list[str] = []
     for segment in segments:
@@ -210,6 +288,8 @@ def _result(
     forward_trace_edges: list[list[str]],
     backward_trace_edges: list[list[str]],
     meeting_node: str | None,
+    route_trace_path: list[str] | None = None,
+    candidate_path_events: list[CandidatePathEvent] | None = None,
 ) -> SearchResult:
     if path_found:
         distance_km, drive_time_min = path_metrics(graph, path)
@@ -231,5 +311,7 @@ def _result(
                 SearchTraceLayer(role="backward", nodes=backward_trace, edges=backward_trace_edges),
             ],
             meeting_node=meeting_node,
+            candidate_path_events=candidate_path_events or [],
         ),
+        route_trace_path=route_trace_path,
     )

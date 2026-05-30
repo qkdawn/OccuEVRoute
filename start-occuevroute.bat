@@ -19,6 +19,11 @@ if errorlevel 1 (
   echo OccuEVRoute backend is already listening on http://127.0.0.1:9000
 )
 
+call :wait_http "http://127.0.0.1:9000/api/health" 60 "backend health"
+if errorlevel 1 exit /b 1
+call :wait_http "http://127.0.0.1:9000/api/boundary" 60 "backend boundary data"
+if errorlevel 1 exit /b 1
+
 call :port_listening 9090
 if errorlevel 1 (
   echo Starting OccuEVRoute Vite deployment on http://127.0.0.1:9090
@@ -27,7 +32,8 @@ if errorlevel 1 (
   echo OccuEVRoute frontend is already listening on http://127.0.0.1:9090
 )
 
-ping -n 6 127.0.0.1 >nul
+call :wait_http "http://127.0.0.1:9090" 60 "frontend preview"
+if errorlevel 1 exit /b 1
 start "" "http://127.0.0.1:9090"
 exit /b 0
 
@@ -63,3 +69,13 @@ exit /b 0
 :port_listening
 powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %~1 -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
 exit /b %errorlevel%
+
+:wait_http
+echo Waiting for %~3...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$url = '%~1'; $timeoutSeconds = [int]'%~2'; $deadline = (Get-Date).AddSeconds($timeoutSeconds); do { try { $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 3; if ([int]$response.StatusCode -ge 200 -and [int]$response.StatusCode -lt 300) { exit 0 } } catch { Start-Sleep -Seconds 1 } } while ((Get-Date) -lt $deadline); exit 1" >nul 2>nul
+if errorlevel 1 (
+  echo Timed out waiting for %~3 at %~1.
+  exit /b 1
+)
+echo %~3 is ready.
+exit /b 0
