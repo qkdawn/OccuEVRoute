@@ -1,2 +1,2 @@
 feature_set,target,features,rows,train_rows,test_rows,stations,mae,r2,elapsed_seconds,split,cutoff_time,train_start,train_end,test_start,test_end
-horizon_context_lag_no_station_id,target_occupancy_rate,52,720000,576236,143764,1423,0.024936965039522013,0.9487422426328812,13.270785499997146,fixed_time_holdout,2023-01-23T19:05:00,2022-09-01T01:00:00,2023-01-23T18:25:00,2023-01-23T22:45:00,2023-02-28T19:30:00
+horizon_context_lag_no_station_id,target_occupancy_rate,52,720000,576236,143764,1423,0.023651185931406114,0.9503361391549081,36.312072000000626,fixed_time_holdout,2023-01-23T19:05:00,2022-09-01T01:00:00,2023-01-23T18:25:00,2023-01-23T22:45:00,2023-02-28T19:30:00

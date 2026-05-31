@@ -218,23 +218,23 @@ target_occupancy_rate = occupancy_rate(t + horizon)
 全站点版本整体结果：
 
 ```text
-overall R2  = 0.948742
-overall MAE = 0.024937
+overall R2  = 0.950336
+overall MAE = 0.023651
 ```
 
 按 horizon 的结果：
 
 | Horizon | MAE | Relative MAE | R2 |
 |---:|---:|---:|---:|
-| 5 min | 0.0138 | 5.65% | 0.9790 |
-| 10 min | 0.0158 | 6.43% | 0.9734 |
-| 15 min | 0.0170 | 6.93% | 0.9706 |
-| 20 min | 0.0186 | 7.63% | 0.9650 |
-| 30 min | 0.0213 | 8.73% | 0.9605 |
-| 45 min | 0.0245 | 10.14% | 0.9542 |
-| 60 min | 0.0296 | 12.18% | 0.9379 |
-| 90 min | 0.0387 | 15.72% | 0.9099 |
-| 120 min | 0.0436 | 17.91% | 0.8894 |
+| 5 min | 0.0121 | 4.96% | 0.9800 |
+| 10 min | 0.0141 | 5.76% | 0.9742 |
+| 15 min | 0.0154 | 6.30% | 0.9719 |
+| 20 min | 0.0173 | 7.08% | 0.9657 |
+| 30 min | 0.0202 | 8.24% | 0.9620 |
+| 45 min | 0.0238 | 9.85% | 0.9555 |
+| 60 min | 0.0290 | 11.92% | 0.9390 |
+| 90 min | 0.0378 | 15.36% | 0.9119 |
+| 120 min | 0.0430 | 17.67% | 0.8937 |
 
 其中：
 
@@ -271,7 +271,7 @@ python src/waiting_prediction/train_lagged_occupancy_model.py
 训练全站点采样版：
 
 ```powershell
-python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 --base-rows-per-station 1000 --max-rows-per-horizon 80000 --shap-sample-size 3000
+python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 --base-rows-per-station 1000 --max-rows-per-horizon 80000 --shap-sample-size 3000 --model-params-file models/occupancy_horizon_best_params.json
 ```
 
 其中：
@@ -279,6 +279,7 @@ python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 -
 - `--max-stations 0` 表示不限制站点数，即使用全部站点。
 - `--base-rows-per-station 1000` 表示每个站点按时间均匀采样 1000 个当前时刻。
 - `--max-rows-per-horizon 80000` 表示每个 horizon 最多保留 80000 行。
+- `--model-params-file models/occupancy_horizon_best_params.json` 表示使用系统化调参得到的最佳 XGBoost 参数。
 
 ## 9. 局限性
 
@@ -292,4 +293,4 @@ python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 -
 
 ## 10. 一句话总结
 
-当前模型是一个支持任意未来时间点输入的多 horizon XGBoost 占用率预测模型。它使用当前状态、短期历史、站点环境、时间、天气、价格、POI 和邻居站点画像来预测 `0-120` 分钟内的未来占用率；在全站点采样测试中，整体 `R2` 约为 `0.949`，短期相对误差低于 `10%`，120 分钟相对误差约为 `17.9%`。
+当前模型是一个支持任意未来时间点输入的多 horizon XGBoost 占用率预测模型。它使用当前状态、短期历史、站点环境、时间、天气、价格、POI 和邻居站点画像来预测 `0-120` 分钟内的未来占用率；在全站点采样测试中，整体 `R2` 约为 `0.950`，短期相对误差低于 `10%`，120 分钟相对误差约为 `17.7%`。

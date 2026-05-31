@@ -7,6 +7,7 @@ import json
 import pickle
 import time
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 
@@ -381,16 +382,44 @@ def time_split(df: pd.DataFrame, cutoff_time: pd.Timestamp) -> tuple[pd.DataFram
     return train_df, test_df
 
 
-def make_model(random_seed: int) -> XGBRegressor:
+DEFAULT_MODEL_PARAMS = {
+    "n_estimators": 500,
+    "max_depth": 5,
+    "learning_rate": 0.04,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+}
+
+
+def normalize_model_params(params: dict[str, Any]) -> dict[str, Any]:
+    out = dict(params)
+    for key in ["n_estimators", "max_depth", "min_child_weight"]:
+        if key in out:
+            out[key] = int(out[key])
+    for key in ["learning_rate", "subsample", "colsample_bytree", "reg_alpha", "reg_lambda"]:
+        if key in out:
+            out[key] = float(out[key])
+    return out
+
+
+def load_model_params(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {}
+    with path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    params = data.get("best_params", data)
+    if not isinstance(params, dict):
+        raise ValueError(f"Model params file must contain an object or best_params object: {path}")
+    return normalize_model_params(params)
+
+
+def make_model(random_seed: int, model_params: dict[str, Any] | None = None) -> XGBRegressor:
+    params = {**DEFAULT_MODEL_PARAMS, **(model_params or {})}
     return XGBRegressor(
         objective="reg:squarederror",
-        n_estimators=500,
-        max_depth=5,
-        learning_rate=0.04,
-        subsample=0.85,
-        colsample_bytree=0.85,
         random_state=random_seed,
         n_jobs=-1,
+        **params,
     )
 
 
@@ -438,11 +467,12 @@ def evaluate_feature_set(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
     random_seed: int,
+    model_params: dict[str, Any] | None = None,
 ) -> tuple[XGBRegressor, dict[str, object], pd.DataFrame]:
     started = time.perf_counter()
-    model = make_model(random_seed)
+    model = make_model(random_seed, model_params)
     model.fit(train_df[features], train_df["target_occupancy_rate"])
-    predictions = model.predict(test_df[features])
+    predictions = np.clip(model.predict(test_df[features]), 0.0, 1.0)
 
     metrics = {
         "feature_set": name,
@@ -504,6 +534,7 @@ def train_and_evaluate(
     pd.DataFrame,
 ]:
     started = time.perf_counter()
+    model_params = load_model_params(args.model_params_file)
     df = build_lagged_frame(args)
     train_df, test_df = time_split(df, pd.Timestamp(args.cutoff_time))
     train_df, test_df = prepare_context_features(args, train_df, test_df)
@@ -512,7 +543,15 @@ def train_and_evaluate(
     importance_parts = []
     models = {}
     for name, features in FEATURE_SETS.items():
-        model, row, importance = evaluate_feature_set(name, features, df, train_df, test_df, args.random_seed)
+        model, row, importance = evaluate_feature_set(
+            name,
+            features,
+            df,
+            train_df,
+            test_df,
+            args.random_seed,
+            model_params,
+        )
         row.update(
             {
                 "split": "fixed_time_holdout",
@@ -556,6 +595,7 @@ def train_and_evaluate(
         "train_rows": len(train_df),
         "test_rows": len(test_df),
         "model": "XGBRegressor",
+        "model_params_file": str(args.model_params_file) if args.model_params_file else None,
         "model_params": model.get_params(),
         "station_dir": str(args.station_dir),
         "weather_file": str(args.weather_file),
@@ -698,6 +738,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--poi-file", type=Path, default=DEFAULT_POI_FILE)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR)
+    parser.add_argument(
+        "--model-params-file",
+        type=Path,
+        default=None,
+        help="Optional JSON file containing best_params from the tuning script.",
+    )
     parser.add_argument("--cutoff-time", type=str, default=DEFAULT_CUTOFF_TIME.isoformat())
     parser.add_argument("--tail-rows-per-station", type=int, default=0)
     parser.add_argument(

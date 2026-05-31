@@ -1,0 +1,62 @@
+{
+  "feature_set": "horizon_context_lag_no_station_id",
+  "selection_metric": "validation_mae",
+  "validation_cutoff": "2023-01-01T00:00:00",
+  "test_cutoff": "2023-01-23T19:05:00",
+  "random_seed": 42,
+  "best_params": {
+    "n_estimators": 500,
+    "max_depth": 9,
+    "learning_rate": 0.02,
+    "subsample": 0.85,
+    "colsample_bytree": 0.9,
+    "min_child_weight": 7,
+    "reg_alpha": 0.05,
+    "reg_lambda": 15.0
+  },
+  "validation_metrics": {
+    "stage": "stage2",
+    "trial": 23,
+    "metric_scope": "validation",
+    "features": 52,
+    "train_rows": 485605,
+    "eval_rows": 90631,
+    "mae": 0.028779815868823225,
+    "r2": 0.9306909754643375,
+    "elapsed_seconds": 16.75472389999777
+  },
+  "test_metrics": {
+    "stage": "best",
+    "trial": 23,
+    "metric_scope": "test",
+    "features": 52,
+    "train_rows": 576236,
+    "eval_rows": 143764,
+    "mae": 0.02362993874260392,
+    "r2": 0.9503279771338391,
+    "elapsed_seconds": 16.12815109998337
+  },
+  "baseline_validation_metrics": {
+    "stage": "baseline",
+    "trial": 0,
+    "metric_scope": "validation",
+    "features": 52,
+    "train_rows": 485605,
+    "eval_rows": 90631,
+    "mae": 0.03021420150397512,
+    "r2": 0.9281102067014226,
+    "elapsed_seconds": 33.50370990001829
+  },
+  "baseline_test_metrics": {
+    "stage": "baseline",
+    "trial": 0,
+    "metric_scope": "test",
+    "features": 52,
+    "train_rows": 576236,
+    "eval_rows": 143764,
+    "mae": 0.024764056676205404,
+    "r2": 0.9490005569314872,
+    "elapsed_seconds": 9.746799099986674
+  },
+  "total_elapsed_seconds": 2680.255931499996
+}
