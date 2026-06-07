@@ -184,6 +184,7 @@ def _empty_search_trace() -> dict:
         "kind": "single",
         "layers": [{"role": "single", "coordinates": [], "edges": []}],
         "candidate_route_events": [],
+        "frontier_events": [],
         "meeting_node_coordinate": None,
     }
 
@@ -202,6 +203,16 @@ def _search_trace(graph, search: SearchResult) -> dict:
         "candidate_route_events": [
             {"step": event.step, "coordinates": _nodes_to_coordinates(graph, event.path)}
             for event in search.search_trace.candidate_path_events
+        ],
+        "frontier_events": [
+            {
+                "step": event.step,
+                "layers": [
+                    {"role": layer.role, "coordinates": _nodes_to_coordinates(graph, layer.nodes)}
+                    for layer in event.layers
+                ],
+            }
+            for event in search.search_trace.frontier_events
         ],
         "meeting_node_coordinate": _optional_node_coordinates(graph, search.search_trace.meeting_node),
     }

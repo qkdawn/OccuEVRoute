@@ -8,6 +8,8 @@ import type {
   BoundaryGeoJson,
   BoundaryGeometry,
   CandidateRouteEvent,
+  FrontierEvent,
+  FrontierLayer,
   LayerVisibility,
   Point,
   RecommendationItem,
@@ -270,10 +272,7 @@ export function RouteMap({
       const showFinalTracePath = traceProgress >= 1;
       const visibleStep = visibleSearchStep(selectedRecommendation, traceProgress);
       if (selectedRecommendation.search_trace.kind === "bidirectional") {
-        if (showFinalTracePath) {
-          const finalCoordinates = finalTraceCoordinates(selectedRecommendation);
-          renderRouteTracePoints(searchTraceLayerRef.current, finalCoordinates, basemap);
-        } else {
+        if (!showFinalTracePath) {
           renderTrace(
             searchTraceLayerRef.current,
             getTraceLayer(selectedRecommendation, "forward"),
@@ -296,6 +295,13 @@ export function RouteMap({
             visibleStep,
             basemap,
           );
+          renderFrontierPoints(
+            searchTraceLayerRef.current,
+            selectedRecommendation.search_trace.frontier_events,
+            visibleStep,
+            basemap,
+            isChTrace,
+          );
         }
         if (showFinalTracePath && selectedRecommendation.search_trace.meeting_node_coordinate) {
           const [lat, lng] = selectedRecommendation.search_trace.meeting_node_coordinate;
@@ -311,10 +317,7 @@ export function RouteMap({
             .addTo(searchTraceLayerRef.current);
         }
       } else {
-        if (showFinalTracePath) {
-          const finalCoordinates = finalTraceCoordinates(selectedRecommendation);
-          renderRouteTracePoints(searchTraceLayerRef.current, finalCoordinates, basemap);
-        } else {
+        if (!showFinalTracePath) {
           renderTrace(
             searchTraceLayerRef.current,
             getTraceLayer(selectedRecommendation, "single"),
@@ -327,6 +330,13 @@ export function RouteMap({
             selectedRecommendation.search_trace.candidate_route_events,
             visibleStep,
             basemap,
+          );
+          renderFrontierPoints(
+            searchTraceLayerRef.current,
+            selectedRecommendation.search_trace.frontier_events,
+            visibleStep,
+            basemap,
+            false,
           );
         }
       }
@@ -489,16 +499,12 @@ function visibleSearchStep(item: RecommendationItem, progress: number) {
 }
 
 interface TraceRenderOptions {
-  pointLimit: number;
-  pointStyle: TracePointRenderStyle;
   showEdges: boolean;
 }
 
 function chTraceOptions(isChTrace: boolean): TraceRenderOptions | undefined {
   if (!isChTrace) return undefined;
   return {
-    pointLimit: TRACE_POINT_LIMIT,
-    pointStyle: CH_TRACE_POINT_STYLE,
     showEdges: false,
   };
 }
@@ -509,7 +515,7 @@ function renderTrace(
   progress: number,
   basemap: Basemap,
   colors: TraceStyle,
-  options: TraceRenderOptions = { pointLimit: TRACE_POINT_LIMIT, pointStyle: DEFAULT_TRACE_POINT_STYLE, showEdges: true },
+  options: TraceRenderOptions = { showEdges: true },
 ) {
   if (!traceLayer) return;
   const visibleNodeCount = Math.max(0, Math.ceil(traceLayer.coordinates.length * progress));
@@ -545,19 +551,6 @@ function renderTrace(
     });
   }
 
-  const renderedPoints = visibleTracePoints.slice(-options.pointLimit);
-  renderedPoints.forEach((point, index, frontier) => {
-    const { opacityBase, opacityRange, radius, weight } = options.pointStyle;
-    const opacity = opacityBase + (index / Math.max(frontier.length - 1, 1)) * opacityRange;
-    L.circleMarker(toLeaflet(point), {
-      radius,
-      color: weight > 0 ? colors.stroke : colors.fill,
-      weight,
-      fillColor: colors.fill,
-      fillOpacity: opacity,
-      interactive: false,
-    }).addTo(layer);
-  });
 }
 
 function renderCandidateRoutePoints(
@@ -576,10 +569,38 @@ function renderCandidateRoutePoints(
   });
 }
 
-function renderRouteTracePoints(layer: L.LayerGroup, coordinates: [number, number][], basemap: Basemap) {
-  coordinates.forEach(([lat, lng]) => {
+function renderFrontierPoints(
+  layer: L.LayerGroup,
+  frontierEvents: FrontierEvent[],
+  visibleStep: number,
+  basemap: Basemap,
+  isChTrace: boolean,
+) {
+  const event = [...frontierEvents].reverse().find((frontierEvent) => frontierEvent.step <= visibleStep);
+  if (!event) return;
+  event.layers.forEach((frontierLayer) => {
+    const colors = TRACE_ROLE_STYLES[frontierLayer.role];
+    const style = isChTrace ? CH_TRACE_POINT_STYLE : DEFAULT_TRACE_POINT_STYLE;
+    renderFrontierLayerPoints(layer, frontierLayer, basemap, colors, style);
+  });
+}
+
+function renderFrontierLayerPoints(
+  layer: L.LayerGroup,
+  frontierLayer: FrontierLayer,
+  basemap: Basemap,
+  colors: TraceStyle,
+  style: TracePointRenderStyle,
+) {
+  const renderedPoints = frontierLayer.coordinates.slice(0, TRACE_POINT_LIMIT);
+  renderedPoints.forEach(([lat, lng], index, frontier) => {
+    const opacity = style.opacityBase + (index / Math.max(frontier.length - 1, 1)) * style.opacityRange;
     L.circleMarker(toLeaflet(toMapPoint({ lat, lng }, basemap)), {
-      ...parentNodeMarkerStyle(),
+      radius: style.radius,
+      color: style.weight > 0 ? colors.stroke : colors.fill,
+      weight: style.weight,
+      fillColor: colors.fill,
+      fillOpacity: opacity,
       interactive: false,
     }).addTo(layer);
   });
@@ -597,10 +618,6 @@ function parentNodeMarkerStyle(): L.CircleMarkerOptions {
 
 function mapPointKey(point: Point) {
   return `${point.lng},${point.lat}`;
-}
-
-function finalTraceCoordinates(item: RecommendationItem) {
-  return item.route_trace_coordinates;
 }
 
 function convexHull(points: Point[]): Point[] {

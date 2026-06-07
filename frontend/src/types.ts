@@ -29,10 +29,21 @@ export interface CandidateRouteEvent {
   coordinates: [number, number][];
 }
 
+export interface FrontierLayer {
+  role: SearchTraceRole;
+  coordinates: [number, number][];
+}
+
+export interface FrontierEvent {
+  step: number;
+  layers: FrontierLayer[];
+}
+
 export interface SearchTrace {
   kind: SearchTraceKind;
   layers: SearchTraceLayer[];
   candidate_route_events: CandidateRouteEvent[];
+  frontier_events: FrontierEvent[];
   meeting_node_coordinate: [number, number] | null;
 }
 

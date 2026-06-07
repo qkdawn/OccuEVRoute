@@ -7,7 +7,14 @@ import time
 
 from ch_index import CHIndex
 from graph_metrics import edge_metrics, path_metrics
-from search_algorithms import CandidatePathEvent, SearchResult, SearchTrace, SearchTraceLayer
+from search_algorithms import (
+    CandidatePathEvent,
+    FrontierEvent,
+    FrontierLayer,
+    SearchResult,
+    SearchTrace,
+    SearchTraceLayer,
+)
 
 
 CH_ALGORITHM = "ch_bidirectional_dijkstra"
@@ -27,11 +34,20 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
             [],
             [],
             start,
+            [
+                FrontierEvent(
+                    step=1,
+                    layers=[
+                        FrontierLayer(role="forward", nodes=[]),
+                        FrontierLayer(role="backward", nodes=[]),
+                    ],
+                )
+            ],
             [start],
             [CandidatePathEvent(step=1, path=[start])],
         )
     if not ch_index.contains(goal):
-        return _result(graph, [], False, 0, started, [], [], [], [], None)
+        return _result(graph, [], False, 0, started, [], [], [], [], None, [])
 
     forward_heap: list[tuple[float, str]] = []
     forward_best: dict[str, float] = {}
@@ -50,6 +66,7 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
     forward_trace_edges: list[list[str]] = []
     backward_trace_edges: list[list[str]] = []
     candidate_path_events: list[CandidatePathEvent] = []
+    frontier_events: list[FrontierEvent] = []
     forward_settled: set[str] = set()
     backward_settled: set[str] = set()
 
@@ -90,6 +107,16 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                         forward_trace_edges.append(trace_edge)
                     heapq.heappush(forward_heap, (new_cost, edge.v))
                     try_relax_meeting(edge.v)
+            _append_frontier_event(
+                frontier_events,
+                len(forward_trace) + len(backward_trace),
+                forward_heap,
+                backward_heap,
+                forward_best,
+                backward_best,
+                forward_settled,
+                backward_settled,
+            )
         else:
             cost, node = heapq.heappop(backward_heap)
             if cost > backward_best.get(node, float("inf")) or node in backward_settled:
@@ -109,6 +136,16 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
                         backward_trace_edges.append(trace_edge)
                     heapq.heappush(backward_heap, (new_cost, edge.u))
                     try_relax_meeting(edge.u)
+            _append_frontier_event(
+                frontier_events,
+                len(forward_trace) + len(backward_trace),
+                forward_heap,
+                backward_heap,
+                forward_best,
+                backward_best,
+                forward_settled,
+                backward_settled,
+            )
 
     if meeting_node is None:
         return _result(
@@ -122,6 +159,7 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
             forward_trace_edges,
             backward_trace_edges,
             None,
+            frontier_events=frontier_events,
         )
 
     path = _reconstruct_path(start, meeting_node, forward_parent, backward_parent, ch_index)
@@ -137,6 +175,7 @@ def ch_bidirectional_dijkstra_search(graph, start: str, goal: str, ch_index: CHI
         forward_trace_edges,
         backward_trace_edges,
         meeting_node,
+        frontier_events,
         route_trace_path,
         candidate_path_events,
     )
@@ -265,6 +304,32 @@ def _append_candidate_path_event(candidate_path_events: list[CandidatePathEvent]
         candidate_path_events.append(CandidatePathEvent(step=step, path=path))
 
 
+def _append_frontier_event(
+    frontier_events: list[FrontierEvent],
+    step: int,
+    forward_heap: list[tuple[float, str]],
+    backward_heap: list[tuple[float, str]],
+    forward_best: dict[str, float],
+    backward_best: dict[str, float],
+    forward_settled: set[str],
+    backward_settled: set[str],
+) -> None:
+    event = FrontierEvent(
+        step=step,
+        layers=[
+            FrontierLayer(role="forward", nodes=_heap_frontier(forward_heap, forward_best, forward_settled)),
+            FrontierLayer(role="backward", nodes=_heap_frontier(backward_heap, backward_best, backward_settled)),
+        ],
+    )
+    if frontier_events and frontier_events[-1] == event:
+        return
+    frontier_events.append(event)
+
+
+def _heap_frontier(heap: list[tuple[float, str]], best: dict[str, float], settled: set[str]) -> list[str]:
+    return [node for cost, node in sorted(heap) if node not in settled and cost <= best.get(node, float("inf"))]
+
+
 def _join_segments(segments: list[list[str]]) -> list[str]:
     path: list[str] = []
     for segment in segments:
@@ -288,6 +353,7 @@ def _result(
     forward_trace_edges: list[list[str]],
     backward_trace_edges: list[list[str]],
     meeting_node: str | None,
+    frontier_events: list[FrontierEvent],
     route_trace_path: list[str] | None = None,
     candidate_path_events: list[CandidatePathEvent] | None = None,
 ) -> SearchResult:
@@ -312,6 +378,7 @@ def _result(
             ],
             meeting_node=meeting_node,
             candidate_path_events=candidate_path_events or [],
+            frontier_events=frontier_events,
         ),
         route_trace_path=route_trace_path,
     )

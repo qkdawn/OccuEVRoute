@@ -43,10 +43,21 @@ class CandidateRouteEvent(BaseModel):
     coordinates: list[tuple[float, float]]
 
 
+class FrontierLayer(BaseModel):
+    role: SearchTraceRole
+    coordinates: list[tuple[float, float]]
+
+
+class FrontierEvent(BaseModel):
+    step: int
+    layers: list[FrontierLayer]
+
+
 class SearchTrace(BaseModel):
     kind: SearchTraceKind
     layers: list[SearchTraceLayer]
     candidate_route_events: list[CandidateRouteEvent] = Field(default_factory=list)
+    frontier_events: list[FrontierEvent]
     meeting_node_coordinate: tuple[float, float] | None = None
 
     @model_validator(mode="after")

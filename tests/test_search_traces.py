@@ -58,6 +58,12 @@ def _layer_edges(result, role: str) -> list[list[str]]:
     return layer.edges
 
 
+def _frontier_nodes(result, step: int, role: str) -> list[str]:
+    event = next(event for event in result.search_trace.frontier_events if event.step == step)
+    layer = next(layer for layer in event.layers if layer.role == role)
+    return layer.nodes
+
+
 def test_bfs_returns_single_trace_on_directed_graph() -> None:
     graph = _graph([("A", "B"), ("B", "C"), ("C", "D")])
 
@@ -69,6 +75,15 @@ def test_bfs_returns_single_trace_on_directed_graph() -> None:
     assert _layer_nodes(result, "single") == ["A", "B", "C", "D"]
     assert result.route_trace_path == ["A", "B", "C", "D"]
     assert result.search_trace.meeting_node is None
+
+
+def test_bfs_frontier_events_track_queue_after_each_expansion() -> None:
+    graph = _graph([("A", "B"), ("A", "C"), ("B", "D"), ("C", "D")])
+
+    result = bfs_search(graph, "A", "D")
+
+    assert _frontier_nodes(result, 1, "single") == ["B", "C"]
+    assert _frontier_nodes(result, 2, "single") == ["C", "D"]
 
 
 def test_bidirectional_bfs_uses_two_frontier_trace_on_directed_graph() -> None:
@@ -84,6 +99,17 @@ def test_bidirectional_bfs_uses_two_frontier_trace_on_directed_graph() -> None:
     assert result.search_trace.meeting_node == "C"
     assert result.search_trace.candidate_path_events[0].step == 3
     assert result.search_trace.candidate_path_events[0].path == ["A", "B", "C", "D"]
+
+
+def test_bidirectional_bfs_frontier_events_track_both_queues() -> None:
+    graph = _graph([("A", "B"), ("B", "C"), ("C", "D")])
+
+    result = bidirectional_bfs_search(graph, "A", "D")
+
+    assert _frontier_nodes(result, 1, "forward") == ["B"]
+    assert _frontier_nodes(result, 1, "backward") == ["D"]
+    assert _frontier_nodes(result, 3, "forward") == []
+    assert _frontier_nodes(result, 3, "backward") == ["C"]
 
 
 def test_bfs_supports_start_access_graph_predecessors() -> None:
@@ -181,12 +207,30 @@ def test_single_frontier_candidate_path_uses_heap_top_not_latest_update(search) 
     assert result.route_trace_path == ["A", "C", "D"]
 
 
+@pytest.mark.parametrize("search", [ucs_search, astar_search])
+def test_single_frontier_priority_algorithms_track_valid_heap_nodes(search) -> None:
+    graph = _weighted_graph(
+        [
+            ("A", "C", 1.0),
+            ("A", "B", 10.0),
+            ("C", "D", 1.0),
+            ("B", "D", 1.0),
+        ]
+    )
+
+    result = search(graph, "A", "D")
+
+    assert _frontier_nodes(result, 1, "single") == ["C", "B"]
+    assert _frontier_nodes(result, 2, "single") == ["D", "B"]
+
+
 def test_search_trace_schema_rejects_non_single_layer_for_single_trace() -> None:
     with pytest.raises(ValidationError):
         SearchTrace.model_validate(
             {
                 "kind": "single",
-                "layers": [{"role": "forward", "coordinates": [(1.0, 2.0)]}],
+                "layers": [{"role": "forward", "coordinates": [(1.0, 2.0)], "edges": []}],
+                "frontier_events": [],
             }
         )
 
@@ -196,7 +240,8 @@ def test_search_trace_schema_rejects_meeting_node_for_single_trace() -> None:
         SearchTrace.model_validate(
             {
                 "kind": "single",
-                "layers": [{"role": "single", "coordinates": [(1.0, 2.0)]}],
+                "layers": [{"role": "single", "coordinates": [(1.0, 2.0)], "edges": []}],
+                "frontier_events": [],
                 "meeting_node_coordinate": (3.0, 4.0),
             }
         )
@@ -207,7 +252,18 @@ def test_search_trace_schema_requires_bidirectional_layers() -> None:
         SearchTrace.model_validate(
             {
                 "kind": "bidirectional",
-                "layers": [{"role": "forward", "coordinates": [(1.0, 2.0)]}],
+                "layers": [{"role": "forward", "coordinates": [(1.0, 2.0)], "edges": []}],
+                "frontier_events": [],
+            }
+        )
+
+
+def test_search_trace_schema_requires_frontier_events() -> None:
+    with pytest.raises(ValidationError):
+        SearchTrace.model_validate(
+            {
+                "kind": "single",
+                "layers": [{"role": "single", "coordinates": [(1.0, 2.0)], "edges": []}],
             }
         )
 
@@ -303,7 +359,11 @@ def test_recommendation_response_includes_ranking_orders() -> None:
         start_node_longitude=114.05,
         start_snap_distance_m=10.0,
         route_coordinates=[],
-        search_trace={"kind": "single", "layers": [{"role": "single", "coordinates": [], "edges": []}]},
+        search_trace={
+            "kind": "single",
+            "layers": [{"role": "single", "coordinates": [], "edges": []}],
+            "frontier_events": [],
+        },
         distance_km=1.0,
         drive_time_min=2.0,
         road_snap_distance_m=3.0,

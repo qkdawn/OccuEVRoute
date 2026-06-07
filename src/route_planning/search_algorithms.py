@@ -33,10 +33,23 @@ class CandidatePathEvent:
 
 
 @dataclass(frozen=True)
+class FrontierLayer:
+    role: SearchTraceRole
+    nodes: list[str]
+
+
+@dataclass(frozen=True)
+class FrontierEvent:
+    step: int
+    layers: list[FrontierLayer]
+
+
+@dataclass(frozen=True)
 class SearchTrace:
     kind: SearchTraceKind
     layers: list[SearchTraceLayer]
-    meeting_node: str | None = None
+    meeting_node: str | None
+    frontier_events: list[FrontierEvent]
     candidate_path_events: list[CandidatePathEvent] = field(default_factory=list)
 
 
@@ -135,8 +148,38 @@ def _append_candidate_path_event(candidate_path_events: list[CandidatePathEvent]
         candidate_path_events.append(CandidatePathEvent(step=step, path=path))
 
 
+def _append_single_frontier_event(frontier_events: list[FrontierEvent], step: int, nodes: list[str]) -> None:
+    _append_frontier_event(frontier_events, step, [FrontierLayer(role="single", nodes=nodes)])
+
+
+def _append_bidirectional_frontier_event(
+    frontier_events: list[FrontierEvent],
+    step: int,
+    forward_nodes: list[str],
+    backward_nodes: list[str],
+) -> None:
+    _append_frontier_event(
+        frontier_events,
+        step,
+        [
+            FrontierLayer(role="forward", nodes=forward_nodes),
+            FrontierLayer(role="backward", nodes=backward_nodes),
+        ],
+    )
+
+
+def _append_frontier_event(frontier_events: list[FrontierEvent], step: int, layers: list[FrontierLayer]) -> None:
+    if frontier_events and frontier_events[-1].step == step and frontier_events[-1].layers == layers:
+        return
+    frontier_events.append(FrontierEvent(step=step, layers=layers))
+
+
 def _queue_candidate_path(parent: dict[str, str | None], queue: deque[str]) -> list[str]:
     return _reconstruct_path(parent, queue[0]) if queue else []
+
+
+def _queue_frontier(queue: deque[str]) -> list[str]:
+    return list(queue)
 
 
 def _cost_heap_candidate_path(
@@ -150,6 +193,10 @@ def _cost_heap_candidate_path(
     return []
 
 
+def _cost_heap_frontier(heap: list[tuple[float, str]], best_cost: dict[str, float]) -> list[str]:
+    return [node for cost, node in sorted(heap) if math.isclose(cost, best_cost.get(node, float("inf")))]
+
+
 def _priority_heap_candidate_path(
     parent: dict[str, str | None],
     heap: list[tuple[float, float, str]],
@@ -159,6 +206,10 @@ def _priority_heap_candidate_path(
         if math.isclose(cost, best_cost.get(node, float("inf"))):
             return _reconstruct_path(parent, node)
     return []
+
+
+def _priority_heap_frontier(heap: list[tuple[float, float, str]], best_cost: dict[str, float]) -> list[str]:
+    return [node for _, cost, node in sorted(heap) if math.isclose(cost, best_cost.get(node, float("inf")))]
 
 
 def _reconstruct_bidirectional_path(
@@ -218,12 +269,15 @@ def _success(
 def _single_trace(
     nodes: list[str],
     edges: list[list[str]],
-    candidate_path_events: list[CandidatePathEvent] | None = None,
+    candidate_path_events: list[CandidatePathEvent],
+    frontier_events: list[FrontierEvent],
 ) -> SearchTrace:
     return SearchTrace(
         kind="single",
         layers=[SearchTraceLayer(role="single", nodes=nodes, edges=edges)],
-        candidate_path_events=candidate_path_events or [],
+        meeting_node=None,
+        frontier_events=frontier_events,
+        candidate_path_events=candidate_path_events,
     )
 
 
@@ -232,8 +286,9 @@ def _bidirectional_trace(
     backward_nodes: list[str],
     forward_edges: list[list[str]],
     backward_edges: list[list[str]],
-    meeting_node: str | None = None,
-    candidate_path_events: list[CandidatePathEvent] | None = None,
+    meeting_node: str | None,
+    candidate_path_events: list[CandidatePathEvent],
+    frontier_events: list[FrontierEvent],
 ) -> SearchTrace:
     return SearchTrace(
         kind="bidirectional",
@@ -242,7 +297,8 @@ def _bidirectional_trace(
             SearchTraceLayer(role="backward", nodes=backward_nodes, edges=backward_edges),
         ],
         meeting_node=meeting_node,
-        candidate_path_events=candidate_path_events or [],
+        frontier_events=frontier_events,
+        candidate_path_events=candidate_path_events,
     )
 
 
@@ -256,6 +312,7 @@ def bfs_search(graph, start: str, goal: str) -> SearchResult:
     expanded_trace = []
     trace_edges = []
     candidate_path_events = []
+    frontier_events = []
 
     while queue:
         node = queue.popleft()
@@ -264,7 +321,15 @@ def bfs_search(graph, start: str, goal: str) -> SearchResult:
         if node == goal:
             path = _reconstruct_path(parent, goal)
             _append_candidate_path_event(candidate_path_events, len(expanded_trace), path)
-            return _success("bfs", graph, path, started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events))
+            _append_single_frontier_event(frontier_events, len(expanded_trace), _queue_frontier(queue))
+            return _success(
+                "bfs",
+                graph,
+                path,
+                started,
+                expanded,
+                _single_trace(expanded_trace, trace_edges, candidate_path_events, frontier_events),
+            )
         for neighbor in graph.successors(node):
             if neighbor not in visited:
                 visited.add(neighbor)
@@ -272,7 +337,8 @@ def bfs_search(graph, start: str, goal: str) -> SearchResult:
                 trace_edges.append([node, neighbor])
                 queue.append(neighbor)
         _append_candidate_path_event(candidate_path_events, len(expanded_trace), _queue_candidate_path(parent, queue))
-    return _not_found("bfs", started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events))
+        _append_single_frontier_event(frontier_events, len(expanded_trace), _queue_frontier(queue))
+    return _not_found("bfs", started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events, frontier_events))
 
 
 def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
@@ -289,7 +355,23 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
             [start],
             started,
             1,
-            _bidirectional_trace([start], [goal], [], [], start),
+            _bidirectional_trace(
+                [start],
+                [goal],
+                [],
+                [],
+                start,
+                [],
+                frontier_events=[
+                    FrontierEvent(
+                        step=1,
+                        layers=[
+                            FrontierLayer(role="forward", nodes=[]),
+                            FrontierLayer(role="backward", nodes=[]),
+                        ],
+                    )
+                ],
+            ),
         )
 
     forward_queue = deque([start])
@@ -304,6 +386,7 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
     forward_trace_edges = []
     backward_trace_edges = []
     candidate_path_events = []
+    frontier_events = []
 
     def expand_forward_layer() -> str | None:
         nonlocal expanded
@@ -318,8 +401,20 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
                 forward_parent[neighbor] = node
                 forward_trace_edges.append([node, neighbor])
                 if neighbor in backward_visited:
+                    _append_bidirectional_frontier_event(
+                        frontier_events,
+                        len(forward_trace_nodes) + len(backward_trace_nodes),
+                        _queue_frontier(forward_queue),
+                        _queue_frontier(backward_queue),
+                    )
                     return neighbor
                 forward_queue.append(neighbor)
+        _append_bidirectional_frontier_event(
+            frontier_events,
+            len(forward_trace_nodes) + len(backward_trace_nodes),
+            _queue_frontier(forward_queue),
+            _queue_frontier(backward_queue),
+        )
         return None
 
     def expand_backward_layer() -> str | None:
@@ -335,8 +430,20 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
                 backward_parent[predecessor] = node
                 backward_trace_edges.append([predecessor, node])
                 if predecessor in forward_visited:
+                    _append_bidirectional_frontier_event(
+                        frontier_events,
+                        len(forward_trace_nodes) + len(backward_trace_nodes),
+                        _queue_frontier(forward_queue),
+                        _queue_frontier(backward_queue),
+                    )
                     return predecessor
                 backward_queue.append(predecessor)
+        _append_bidirectional_frontier_event(
+            frontier_events,
+            len(forward_trace_nodes) + len(backward_trace_nodes),
+            _queue_frontier(forward_queue),
+            _queue_frontier(backward_queue),
+        )
         return None
 
     while forward_queue and backward_queue:
@@ -359,6 +466,7 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
                     backward_trace_edges,
                     meeting_node,
                     candidate_path_events,
+                    frontier_events,
                 ),
             )
 
@@ -371,7 +479,9 @@ def bidirectional_bfs_search(graph, start: str, goal: str) -> SearchResult:
             backward_trace_nodes,
             forward_trace_edges,
             backward_trace_edges,
+            None,
             candidate_path_events=candidate_path_events,
+            frontier_events=frontier_events,
         ),
     )
 
@@ -385,6 +495,7 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
     expanded_trace = []
     trace_edges = []
     candidate_path_events = []
+    frontier_events = []
 
     while heap:
         cost, node = heapq.heappop(heap)
@@ -395,7 +506,15 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
         if node == goal:
             path = _reconstruct_path(parent, goal)
             _append_candidate_path_event(candidate_path_events, len(expanded_trace), path)
-            return _success("ucs", graph, path, started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events))
+            _append_single_frontier_event(frontier_events, len(expanded_trace), _cost_heap_frontier(heap, best_cost))
+            return _success(
+                "ucs",
+                graph,
+                path,
+                started,
+                expanded,
+                _single_trace(expanded_trace, trace_edges, candidate_path_events, frontier_events),
+            )
         for neighbor in graph.successors(node):
             _, travel_time_s = edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
@@ -405,7 +524,8 @@ def ucs_search(graph, start: str, goal: str) -> SearchResult:
                 trace_edges.append([node, neighbor])
                 heapq.heappush(heap, (new_cost, neighbor))
         _append_candidate_path_event(candidate_path_events, len(expanded_trace), _cost_heap_candidate_path(parent, heap, best_cost))
-    return _not_found("ucs", started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events))
+        _append_single_frontier_event(frontier_events, len(expanded_trace), _cost_heap_frontier(heap, best_cost))
+    return _not_found("ucs", started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events, frontier_events))
 
 
 def astar_search(
@@ -423,6 +543,7 @@ def astar_search(
     expanded_trace = []
     trace_edges = []
     candidate_path_events = []
+    frontier_events = []
 
     while heap:
         _, cost, node = heapq.heappop(heap)
@@ -433,7 +554,15 @@ def astar_search(
         if node == goal:
             path = _reconstruct_path(parent, goal)
             _append_candidate_path_event(candidate_path_events, len(expanded_trace), path)
-            return _success(algorithm, graph, path, started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events))
+            _append_single_frontier_event(frontier_events, len(expanded_trace), _priority_heap_frontier(heap, best_cost))
+            return _success(
+                algorithm,
+                graph,
+                path,
+                started,
+                expanded,
+                _single_trace(expanded_trace, trace_edges, candidate_path_events, frontier_events),
+            )
         for neighbor in graph.successors(node):
             _, travel_time_s = edge_metrics(graph, node, neighbor)
             new_cost = cost + travel_time_s / 60
@@ -444,7 +573,8 @@ def astar_search(
                 priority = new_cost + _heuristic_minutes(graph, neighbor, goal, landmark_heuristic)
                 heapq.heappush(heap, (priority, new_cost, neighbor))
         _append_candidate_path_event(candidate_path_events, len(expanded_trace), _priority_heap_candidate_path(parent, heap, best_cost))
-    return _not_found(algorithm, started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events))
+        _append_single_frontier_event(frontier_events, len(expanded_trace), _priority_heap_frontier(heap, best_cost))
+    return _not_found(algorithm, started, expanded, _single_trace(expanded_trace, trace_edges, candidate_path_events, frontier_events))
 
 
 def alt_astar_search(
