@@ -1,0 +1,65 @@
+{
+  "feature_set": "horizon_context_lag_no_station_id",
+  "selection_metric": "validation_mae",
+  "validation_cutoff": "2023-01-01T00:00:00",
+  "test_cutoff": "2023-01-23T19:05:00",
+  "random_seed": 42,
+  "study_name": "occupancy_horizon_xgboost_optuna",
+  "trials": 60,
+  "best_trial": 53,
+  "best_params": {
+    "n_estimators": 800,
+    "max_depth": 10,
+    "learning_rate": 0.013387836038795686,
+    "subsample": 0.6,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 7,
+    "reg_alpha": 0.01,
+    "reg_lambda": 15.0
+  },
+  "validation_metrics": {
+    "stage": "optuna",
+    "trial": 53,
+    "metric_scope": "validation",
+    "features": 52,
+    "train_rows": 485605,
+    "eval_rows": 90631,
+    "mae": 0.028643320594255537,
+    "r2": 0.9311317684376217,
+    "elapsed_seconds": 41.16961519999313
+  },
+  "test_metrics": {
+    "stage": "optuna_best",
+    "trial": 53,
+    "metric_scope": "test",
+    "features": 52,
+    "train_rows": 576236,
+    "eval_rows": 143764,
+    "mae": 0.023546534477397348,
+    "r2": 0.9505566234721574,
+    "elapsed_seconds": 32.22259560000384
+  },
+  "baseline_validation_metrics": {
+    "stage": "baseline",
+    "trial": 0,
+    "metric_scope": "validation",
+    "features": 52,
+    "train_rows": 485605,
+    "eval_rows": 90631,
+    "mae": 0.03021420150397512,
+    "r2": 0.9281102067014226,
+    "elapsed_seconds": 8.315989199996693
+  },
+  "baseline_test_metrics": {
+    "stage": "baseline",
+    "trial": 0,
+    "metric_scope": "test",
+    "features": 52,
+    "train_rows": 576236,
+    "eval_rows": 143764,
+    "mae": 0.024764056676205404,
+    "r2": 0.9490005569314872,
+    "elapsed_seconds": 9.10783240001183
+  },
+  "total_elapsed_seconds": 2227.2456770999997
+}

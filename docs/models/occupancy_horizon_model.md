@@ -218,23 +218,23 @@ target_occupancy_rate = occupancy_rate(t + horizon)
 全站点版本整体结果：
 
 ```text
-overall R2  = 0.950336
-overall MAE = 0.023651
+overall R2  = 0.950467
+overall MAE = 0.023527
 ```
 
 按 horizon 的结果：
 
 | Horizon | MAE | Relative MAE | R2 |
 |---:|---:|---:|---:|
-| 5 min | 0.0121 | 4.96% | 0.9800 |
-| 10 min | 0.0141 | 5.76% | 0.9742 |
-| 15 min | 0.0154 | 6.30% | 0.9719 |
-| 20 min | 0.0173 | 7.08% | 0.9657 |
-| 30 min | 0.0202 | 8.24% | 0.9620 |
-| 45 min | 0.0238 | 9.85% | 0.9555 |
-| 60 min | 0.0290 | 11.92% | 0.9390 |
-| 90 min | 0.0378 | 15.36% | 0.9119 |
-| 120 min | 0.0430 | 17.67% | 0.8937 |
+| 5 min | 0.0121 | 4.94% | 0.9800 |
+| 10 min | 0.0140 | 5.69% | 0.9742 |
+| 15 min | 0.0151 | 6.16% | 0.9721 |
+| 20 min | 0.0171 | 7.00% | 0.9660 |
+| 30 min | 0.0202 | 8.25% | 0.9619 |
+| 45 min | 0.0237 | 9.79% | 0.9554 |
+| 60 min | 0.0290 | 11.90% | 0.9393 |
+| 90 min | 0.0377 | 15.32% | 0.9120 |
+| 120 min | 0.0428 | 17.62% | 0.8943 |
 
 其中：
 
@@ -244,7 +244,34 @@ Relative MAE = MAE / target_mean
 
 短期预测相对误差低于 10%，长期预测相对误差低于 30%，说明当前模型在课程项目和演示场景中表现较好。
 
-## 7. 结果文件
+## 7. 特征交互分析
+
+本次对最终 Optuna 模型做了 SHAP interaction 分析。分析使用测试集样本计算特征两两交互强度，数值越大表示这两个特征组合对预测的额外贡献越明显。
+
+最强的交互主要集中在短期历史占用率特征之间：
+
+| 排名 | 特征 A | 特征 B | Mean absolute interaction |
+|---:|---|---|---:|
+| 1 | `occupancy_lag_1` | `occupancy_rolling_mean_6` | 0.020095 |
+| 2 | `occupancy_lag_1` | `occupancy_rolling_mean_12` | 0.006272 |
+| 3 | `occupancy_lag_1` | `occupancy_lag_3` | 0.004074 |
+| 4 | `station_same_hour_occupancy` | `occupancy_lag_1` | 0.002996 |
+| 5 | `occupancy_rolling_mean_6` | `occupancy_rolling_mean_12` | 0.002574 |
+
+这说明模型最主要学习的是“当前/短期历史占用率状态如何共同决定未来占用率”。同时，`prediction_horizon_min x occupancy_lag_1` 也进入前 10，说明模型会根据预测时间距离调整当前占用率对未来的影响。
+
+特征交互分析结果输出在：
+
+```text
+docs/figures/occupancy_horizon_shap_interactions.csv
+docs/figures/occupancy_horizon_top_interactions.png
+docs/figures/occupancy_horizon_interaction_pdp_lag_horizon.csv
+docs/figures/occupancy_horizon_interaction_pdp_lag_horizon.png
+```
+
+其中 `occupancy_horizon_interaction_pdp_lag_horizon.png` 展示了 `occupancy_lag_1` 与 `prediction_horizon_min` 的二维 partial dependence，用于观察当前占用率和预测 horizon 如何共同影响未来占用率。
+
+## 8. 结果文件
 
 模型和评估结果输出在：
 
@@ -258,9 +285,13 @@ docs/figures/occupancy_horizon_feature_importance.csv
 docs/figures/occupancy_horizon_shap_importance.csv
 docs/figures/occupancy_horizon_shap_bar.png
 docs/figures/occupancy_horizon_shap_summary.png
+docs/figures/occupancy_horizon_shap_interactions.csv
+docs/figures/occupancy_horizon_top_interactions.png
+docs/figures/occupancy_horizon_interaction_pdp_lag_horizon.csv
+docs/figures/occupancy_horizon_interaction_pdp_lag_horizon.png
 ```
 
-## 8. 运行方式
+## 9. 运行方式
 
 默认训练 100 个站点：
 
@@ -271,7 +302,7 @@ python src/waiting_prediction/train_lagged_occupancy_model.py
 训练全站点采样版：
 
 ```powershell
-python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 --base-rows-per-station 1000 --max-rows-per-horizon 80000 --shap-sample-size 3000 --model-params-file models/occupancy_horizon_best_params.json
+python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 --base-rows-per-station 1000 --max-rows-per-horizon 80000 --shap-sample-size 3000 --model-params-file models/occupancy_horizon_optuna_best_params.json
 ```
 
 其中：
@@ -279,9 +310,15 @@ python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 -
 - `--max-stations 0` 表示不限制站点数，即使用全部站点。
 - `--base-rows-per-station 1000` 表示每个站点按时间均匀采样 1000 个当前时刻。
 - `--max-rows-per-horizon 80000` 表示每个 horizon 最多保留 80000 行。
-- `--model-params-file models/occupancy_horizon_best_params.json` 表示使用系统化调参得到的最佳 XGBoost 参数。
+- `--model-params-file models/occupancy_horizon_optuna_best_params.json` 表示使用 Optuna 调参得到的最佳 XGBoost 参数。
 
-## 9. 局限性
+运行特征交互分析：
+
+```powershell
+python src/waiting_prediction/analyze_horizon_feature_interactions.py --max-stations 0 --base-rows-per-station 1000 --max-rows-per-horizon 80000 --shap-sample-size 500 --pdp-sample-size 3000 --top-n 50
+```
+
+## 10. 局限性
 
 1. 原始数据是 5 分钟粒度，非 5 分钟整数倍预测属于模型连续估计。
 
@@ -291,6 +328,6 @@ python src/waiting_prediction/train_lagged_occupancy_model.py --max-stations 0 -
 
 4. 模型虽然可以预测未来占用率，但线上推荐系统是否接入该模型，需要另行在 backend 中加载模型并构造实时特征。
 
-## 10. 一句话总结
+## 11. 一句话总结
 
-当前模型是一个支持任意未来时间点输入的多 horizon XGBoost 占用率预测模型。它使用当前状态、短期历史、站点环境、时间、天气、价格、POI 和邻居站点画像来预测 `0-120` 分钟内的未来占用率；在全站点采样测试中，整体 `R2` 约为 `0.950`，短期相对误差低于 `10%`，120 分钟相对误差约为 `17.7%`。
+当前模型是一个支持任意未来时间点输入的多 horizon XGBoost 占用率预测模型。它使用当前状态、短期历史、站点环境、时间、天气、价格、POI 和邻居站点画像来预测 `0-120` 分钟内的未来占用率；在全站点采样测试中，整体 `R2` 约为 `0.950`，短期相对误差低于 `10%`，120 分钟相对误差约为 `17.6%`。
